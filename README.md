@@ -1,13 +1,13 @@
 # 🧁 Coco's Bakery · Pastelería de Fantasía
 
-Sitio web oficial de **Coco's Bakery**, pastelería artesanal de fantasía inspirada en la estética **Monerías de Café** (*Café Cuties*).
+Sitio web oficial de **Coco's Bakery**, pastelería artesanal y repostería mágica de fantasía hecha con cariño.
 
 ---
 
 ## 📅 Última Actualización · Noviembre 2026
 
-### 🎀 Revamp Visual Completo ("Monerías de Café")
-* **Nuevo Sistema de Diseño:** Paleta inspirada en casas de té victoriano y repostería mágica (crema de vainilla `#FFF9F5`, rosa pastel empolvado `#FCE8EB` / `#F7C6D0`, detalles en oro vintage `#D4AF37` y chocolate cálido `#3D2319`).
+### 🎀 Revamp Visual Completo
+* **Nuevo Sistema de Diseño:** Paleta delicada de repostería mágica (crema de vainilla `#FFF9F5`, rosa pastel empolvado `#FCE8EB` / `#F7C6D0`, detalles en oro vintage `#D4AF37` y chocolate cálido `#3D2319`).
 * **Adiós al Neo-brutalismo:** Se eliminó la cuadrícula arenosa de fondo y los bordes toscos; se incorporaron sombras suaves multicapa (*marshmallow & cream*), marcos festoneados de encaje y tipografía refinada (*Cormorant Garamond* y *Nunito Sans*).
 * **Marquee Infinito Animado:** Marquesina continua y fluida con especialidades, tacitas de té, coronas y destellos.
 * **Catálogo Apetitoso:** Se reemplazaron las formas geométricas abstractas por tarjetas con fotografías reales de pastelería en alta definición, etiquetas de categoría y botón directo para consultar y pedir por **WhatsApp**.
@@ -66,7 +66,7 @@ cocos-bakery/
 ├── catalogo.html                # Catálogo de dulces con filtros y pedidos WhatsApp
 ├── admin.html                   # Panel privado de gestión de carta y productos
 ├── script.js                    # Motor interactivo: CRUD, filtros, eventos y animaciones
-├── styles.css                   # Hoja de estilos con el design system "Monerías de Café"
+├── styles.css                   # Hoja de estilos con el design system pastel de fantasía
 ├── iniciar_sitio.bat            # Script lanzador del servidor local en 1 clic
 └── README.md                    # Documentación y registro de actualizaciones
 ```

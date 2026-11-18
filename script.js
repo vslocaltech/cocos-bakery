@@ -1,11 +1,11 @@
 /**
  * ============================================================================
  * COCO'S BAKERY — SCRIPT PRINCIPAL & GESTOR DE PRODUCTOS
- * Estilo "Monerías de Café"
+ * Pastelería de Fantasía
  * ============================================================================
  */
 
-// Productos iniciales por defecto (Estilo Café Cuties / Pastelería de fantasía)
+// Productos iniciales por defecto (Pastelería de fantasía)
 const DEFAULT_PRODUCTS = [
   {
     name: "Corazones de Azúcar & Frutilla",
@@ -15,7 +15,7 @@ const DEFAULT_PRODUCTS = [
     image: "https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=700&q=80"
   },
   {
-    name: "Cake de Ensueño Monerías",
+    name: "Cake de Ensueño Vintage",
     category: "Tortas",
     price: "$18.500",
     description: "Bizcochuelo de vainilla bourbon relleno de crema chantilly, frutos del bosque y decoración vintage con moños.",

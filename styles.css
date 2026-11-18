@@ -1,11 +1,11 @@
 /* ==========================================================================
-   COCO'S BAKERY — ESTILO "MONERÍAS DE CAFÉ" (CAFÉ CUTIES)
-   Inspirado en la temática victoriana / maid café de fantasía, repostería mágica,
+   COCO'S BAKERY — PASTELERÍA DE FANTASÍA & REPOSTERÍA ARTESANAL
+   Inspirado en la delicadeza victoriana, repostería mágica,
    tonos rosa pastel, crema de vainilla, acentos dorados y lazos delicados.
    ========================================================================== */
 
 :root {
-  /* Paleta "Monerías de Café" */
+  /* Paleta Pastel de Fantasía */
   --cream-base: #FFF9F5;
   --cream-card: #FFFFFF;
   --cream-tint: #FFF2EB;
@@ -388,7 +388,7 @@ h3 {
 }
 
 /* ==========================================================================
-   SECCIÓN HERO (FANTASÍA CAFÉ CUTIES)
+   SECCIÓN HERO (PASTELERÍA DE FANTASÍA)
    ========================================================================== */
 
 .hero {
@@ -605,7 +605,7 @@ h3 {
 }
 
 /* ==========================================================================
-   TARJETAS DE PRODUCTO Y GRILLAS (CAFÉ CUTIES SWEET CARDS)
+   TARJETAS DE PRODUCTO Y GRILLAS (SWEET CARDS)
    ========================================================================== */
 
 .section-heading {

@@ -3,7 +3,7 @@ title Coco's Bakery - Servidor Local
 chcp 65001 >nul
 echo.
 echo ========================================================
-echo    🧁 INICIANDO COCO'S BAKERY (MONERÍAS DE CAFÉ) 🧁
+echo    🧁 INICIANDO COCO'S BAKERY (SERVIDOR LOCAL) 🧁
 echo ========================================================
 echo.
 
