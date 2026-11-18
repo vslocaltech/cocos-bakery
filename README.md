@@ -12,7 +12,6 @@ Sitio web oficial de **Coco's Bakery**, pastelería artesanal y repostería mág
 * **Marquee Infinito Animado:** Marquesina continua y fluida con especialidades, tacitas de té, coronas y destellos.
 * **Hero y Lazos Proporcionados:** Lazos decorativos fijados directamente al marco circular del logo de Coco para mantener armonía en cualquier pantalla.
 * **Sección Historia Cálida:** Fotografía ambiental de pastelería artesanal combinada con el sello de Coco superpuesto.
-* **Galería Feed de Instagram:** 4 postales fotográficas interactivas con detalles de horneado y efecto *hover*.
 * **Modal de Producto:** Ventana emergente con fotografía ampliada en alta resolución, ingredientes y botón de pedido al hacer clic en cualquier dulce.
 * **Etiquetas Destacadas (Tags):** Badges dorados como *"Más pedido"*, *"Favorito"* o *"Personalizable"* en las tarjetas.
 * **Botón Flotante de WhatsApp:** Acceso rápido y persistente con tooltip en la esquina inferior derecha.

@@ -887,74 +887,11 @@ h3 {
 }
 
 /* ==========================================================================
-   SECCIÓN REDES SOCIALES (GALERÍA ESTILO INSTAGRAM)
+   SECCIÓN REDES SOCIALES
    ========================================================================== */
 
 .social-section {
   text-align: center;
-}
-
-.insta-feed-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
-  max-width: 1100px;
-  margin: 40px auto 35px;
-}
-
-.insta-card {
-  position: relative;
-  aspect-ratio: 1;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  border: 1px solid rgba(212, 175, 55, 0.3);
-  box-shadow: var(--shadow-sm);
-  background: var(--cream-card);
-}
-
-.insta-card img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 0.6s ease;
-}
-
-.insta-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to top, rgba(61, 35, 25, 0.85) 0%, rgba(208, 83, 115, 0.4) 100%);
-  color: #FFFFFF;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  padding: 16px;
-  opacity: 0;
-  transition: var(--transition);
-  text-align: left;
-}
-
-.insta-card:hover img {
-  transform: scale(1.08);
-}
-
-.insta-card:hover .insta-overlay {
-  opacity: 1;
-}
-
-.insta-overlay p {
-  font-size: 13px;
-  font-weight: 600;
-  margin: 0 0 6px;
-  line-height: 1.35;
-}
-
-.insta-meta {
-  font-size: 12px;
-  color: var(--gold-shimmer);
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 
 .social-cards {
@@ -1622,10 +1559,6 @@ h3 {
   .admin-grid-layout {
     grid-template-columns: 1fr;
   }
-
-  .insta-feed-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
 }
 
 @media (max-width: 768px) {
@@ -1684,10 +1617,6 @@ h3 {
 }
 
 @media (max-width: 480px) {
-  .insta-feed-grid {
-    grid-template-columns: 1fr;
-  }
-  
   .story-stamp-card {
     position: relative;
     bottom: auto;
