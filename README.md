@@ -10,17 +10,24 @@ Sitio web oficial de **Coco's Bakery**, pastelería artesanal y repostería mág
 * **Nuevo Sistema de Diseño:** Paleta delicada de repostería mágica (crema de vainilla `#FFF9F5`, rosa pastel empolvado `#FCE8EB` / `#F7C6D0`, detalles en oro vintage `#D4AF37` y chocolate cálido `#3D2319`).
 * **Adiós al Neo-brutalismo:** Se eliminó la cuadrícula arenosa de fondo y los bordes toscos; se incorporaron sombras suaves multicapa (*marshmallow & cream*), marcos festoneados de encaje y tipografía refinada (*Cormorant Garamond* y *Nunito Sans*).
 * **Marquee Infinito Animado:** Marquesina continua y fluida con especialidades, tacitas de té, coronas y destellos.
-* **Catálogo Apetitoso:** Se reemplazaron las formas geométricas abstractas por tarjetas con fotografías reales de pastelería en alta definición, etiquetas de categoría y botón directo para consultar y pedir por **WhatsApp**.
+* **Hero y Lazos Proporcionados:** Lazos decorativos fijados directamente al marco circular del logo de Coco para mantener armonía en cualquier pantalla.
+* **Sección Historia Cálida:** Fotografía ambiental de pastelería artesanal combinada con el sello de Coco superpuesto.
+* **Galería Feed de Instagram:** 4 postales fotográficas interactivas con detalles de horneado y efecto *hover*.
+* **Modal de Producto:** Ventana emergente con fotografía ampliada en alta resolución, ingredientes y botón de pedido al hacer clic en cualquier dulce.
+* **Etiquetas Destacadas (Tags):** Badges dorados como *"Más pedido"*, *"Favorito"* o *"Personalizable"* en las tarjetas.
+* **Botón Flotante de WhatsApp:** Acceso rápido y persistente con tooltip en la esquina inferior derecha.
+* **Favicon Temático SVG:** Icono `🧁` en la pestaña del navegador sin requerir archivos externos.
 
 ---
 
-### 👑 Nuevo Panel de Administración Interactivo
-* **Área Privada (`admin.html`):** Pantalla de ingreso protegida con clave personalizada (`coco`).
+### 👑 Panel de Administración Interactivo
+* **Área Privada (`admin.html`):** Pantalla de ingreso protegida con clave (`coco`).
 * **Gestión Completa de Productos (CRUD en tiempo real):**
-  * **Agregar nuevos dulces:** Nombre, categoría (Tortas, Galletitas, Dulces, Especiales), precio referencial, descripción y fotografía.
-  * **Soporte de Fotos:** Subida directa de archivos desde la computadora (con vista previa inmediata) o mediante enlaces web (URLs).
-  * **Edición y Eliminación:** Botón de edición `✎` para modificar cualquier dato de productos existentes y botón `✕` con confirmación de borrado.
-  * **Sincronización Automática:** Todo cambio guardado en el panel se actualiza al instante en la tienda (`index.html` y `catalogo.html`) mediante persistencia local en el navegador.
+  * **Agregar y Editar Dulces:** Nombre, categoría, etiquetas destacadas, precio referencial, descripción y fotografía.
+  * **Buscador en Tiempo Real y Contador:** Filtro dinámico por nombre o categoría en la lista y conteo de dulces publicados.
+  * **Botón Restaurar Ejemplos:** Reinicio rápido a los 6 productos iniciales con un clic.
+  * **Soporte de Fotos:** Subida directa de archivos locales (con vista previa inmediata) o mediante enlaces web (URLs).
+  * **Sincronización Automática:** Todo cambio guardado se actualiza al instante en la tienda (`index.html` y `catalogo.html`).
 
 ---
 

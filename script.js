@@ -10,6 +10,7 @@ const DEFAULT_PRODUCTS = [
   {
     name: "Corazones de Azúcar & Frutilla",
     category: "Galletitas",
+    tag: "Favorito",
     price: "$3.200",
     description: "Galletas de mantequilla con glaseado de vainilla, polvo de frutilla y detalles de oro comestible.",
     image: "https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=700&q=80"
@@ -17,6 +18,7 @@ const DEFAULT_PRODUCTS = [
   {
     name: "Cake de Ensueño Vintage",
     category: "Tortas",
+    tag: "Más pedido",
     price: "$18.500",
     description: "Bizcochuelo de vainilla bourbon relleno de crema chantilly, frutos del bosque y decoración vintage con moños.",
     image: "https://images.unsplash.com/photo-1535141192574-5d4897c13136?auto=format&fit=crop&w=700&q=80"
@@ -24,6 +26,7 @@ const DEFAULT_PRODUCTS = [
   {
     name: "Bocados de Cacao Real & Menta",
     category: "Dulces",
+    tag: "Especial",
     price: "$4.100",
     description: "Brownies de chocolate belga intenso 70% con corazón cremoso y suave frosting de menta pastel.",
     image: "https://images.unsplash.com/photo-1606313564200-e75d5e30476c?auto=format&fit=crop&w=700&q=80"
@@ -31,6 +34,7 @@ const DEFAULT_PRODUCTS = [
   {
     name: "Cupcakes de la Hora del Té",
     category: "Dulces",
+    tag: "Destacado",
     price: "$4.800",
     description: "Esponjosos cupcakes con remolino de crema de fresa, perlas de azúcar y moño rosa artesanal.",
     image: "https://images.unsplash.com/photo-1587668178277-295251f900ce?auto=format&fit=crop&w=700&q=80"
@@ -38,6 +42,7 @@ const DEFAULT_PRODUCTS = [
   {
     name: "Macarons de Pétalos de Rosa",
     category: "Galletitas",
+    tag: "Edición limitada",
     price: "$5.400",
     description: "Caja de macarons franceses rellenos de ganache de chocolate blanco, agua de rosas y frambuesa.",
     image: "https://images.unsplash.com/photo-1569864358642-9d1684040f43?auto=format&fit=crop&w=700&q=80"
@@ -45,6 +50,7 @@ const DEFAULT_PRODUCTS = [
   {
     name: "Tarta Vintage de Frutos Dulces",
     category: "Tortas",
+    tag: "Personalizable",
     price: "$16.900",
     description: "Masa sablée crocante, crema diplomata perfumada con limón y lluvia de fresas frescas con glaseado brillante.",
     image: "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=700&q=80"
@@ -101,6 +107,68 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ============================================================================
+// MODAL / VISTA DETALLADA DE PRODUCTO
+// ============================================================================
+function openProductModal(prod) {
+  let overlay = document.querySelector('#product-modal-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'product-modal-overlay';
+    overlay.className = 'modal-overlay';
+    document.body.appendChild(overlay);
+  }
+
+  overlay.innerHTML = `
+    <div class="product-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title-elem">
+      <button type="button" class="modal-close-btn" aria-label="Cerrar ventana">✕</button>
+      <div class="modal-media">
+        <img src="${escapeHtml(prod.image || 'https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=800&q=80')}" 
+             alt="${escapeHtml(prod.name)}" />
+      </div>
+      <div class="modal-content">
+        <div>
+          <div class="modal-badges">
+            <span class="badge-kind" style="position: static;">${escapeHtml(prod.category || 'Especial')}</span>
+            ${prod.tag ? `<span class="badge-tag" style="position: static;">${escapeHtml(prod.tag)}</span>` : ''}
+          </div>
+          <h3 class="modal-title" id="modal-title-elem">${escapeHtml(prod.name)}</h3>
+          <p class="modal-desc">${escapeHtml(prod.description)}</p>
+        </div>
+        <div class="modal-price-box">
+          <span class="modal-price">${escapeHtml(prod.price || 'Consultar')}</span>
+          <a href="https://wa.me/?text=${encodeURIComponent('¡Hola Coco\'s Bakery! Quisiera pedir / consultar por: ' + prod.name)}" 
+             target="_blank" 
+             rel="noopener noreferrer" 
+             class="button button-pink">
+            Pedir por WhatsApp <span>♥</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  `;
+
+  overlay.classList.add('active');
+
+  const closeBtn = overlay.querySelector('.modal-close-btn');
+  closeBtn?.addEventListener('click', closeModal);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeModal();
+  });
+
+  function handleKeydown(e) {
+    if (e.key === 'Escape') {
+      closeModal();
+      window.removeEventListener('keydown', handleKeydown);
+    }
+  }
+  window.addEventListener('keydown', handleKeydown);
+
+  function closeModal() {
+    overlay.classList.remove('active');
+  }
+}
+
+// ============================================================================
 // PÁGINA: CATÁLOGO (catalogo.html)
 // ============================================================================
 function initCataloguePage() {
@@ -126,17 +194,18 @@ function initCataloguePage() {
       return;
     }
 
-    grid.innerHTML = filtered.map(prod => `
-      <article class="product-card">
-        <div class="product-media">
+    grid.innerHTML = filtered.map((prod, idx) => `
+      <article class="product-card" data-idx="${idx}">
+        <div class="product-media" title="Clic para ver detalles">
           <span class="badge-kind">${escapeHtml(prod.category || 'Especial')}</span>
+          ${prod.tag ? `<span class="badge-tag">${escapeHtml(prod.tag)}</span>` : ''}
           <img src="${escapeHtml(prod.image || 'https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=600&q=80')}" 
                alt="${escapeHtml(prod.name)}" 
                loading="lazy" 
                onerror="this.src='https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=600&q=80'"/>
         </div>
         <div class="product-info">
-          <h3 class="product-title">${escapeHtml(prod.name)}</h3>
+          <h3 class="product-title" style="cursor: pointer;" title="Clic para ver detalles">${escapeHtml(prod.name)}</h3>
           <p class="product-desc">${escapeHtml(prod.description)}</p>
           <div class="product-footer">
             <span class="product-price">${escapeHtml(prod.price || 'Consultar')}</span>
@@ -150,6 +219,13 @@ function initCataloguePage() {
         </div>
       </article>
     `).join('');
+
+    // Listener para abrir modal al hacer clic en imagen o título
+    grid.querySelectorAll('.product-card').forEach((card, i) => {
+      const prod = filtered[i];
+      card.querySelector('.product-media')?.addEventListener('click', () => openProductModal(prod));
+      card.querySelector('.product-title')?.addEventListener('click', () => openProductModal(prod));
+    });
   }
 
   filterButtons.forEach(btn => {
@@ -172,24 +248,32 @@ function initIndexPage() {
   if (!treatGrid) return;
 
   const products = getProducts().slice(0, 3);
-  treatGrid.innerHTML = products.map(prod => `
+  treatGrid.innerHTML = products.map((prod, idx) => `
     <article class="product-card">
-      <div class="product-media">
+      <div class="product-media" title="Clic para ver detalles">
         <span class="badge-kind">${escapeHtml(prod.category || 'Favorito')}</span>
+        ${prod.tag ? `<span class="badge-tag">${escapeHtml(prod.tag)}</span>` : ''}
         <img src="${escapeHtml(prod.image || 'https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=600&q=80')}" 
              alt="${escapeHtml(prod.name)}" 
              loading="lazy" />
       </div>
       <div class="product-info">
-        <h3 class="product-title">${escapeHtml(prod.name)}</h3>
+        <h3 class="product-title" style="cursor: pointer;" title="Clic para ver detalles">${escapeHtml(prod.name)}</h3>
         <p class="product-desc">${escapeHtml(prod.description)}</p>
         <div class="product-footer">
           <span class="product-price">${escapeHtml(prod.price || 'Consultar')}</span>
-          <a href="catalogo.html" class="order-btn">Ver más <span>→</span></a>
+          <button type="button" class="order-btn modal-trigger">Ver dulce <span>✨</span></button>
         </div>
       </div>
     </article>
   `).join('');
+
+  treatGrid.querySelectorAll('.product-card').forEach((card, i) => {
+    const prod = products[i];
+    card.querySelector('.product-media')?.addEventListener('click', () => openProductModal(prod));
+    card.querySelector('.product-title')?.addEventListener('click', () => openProductModal(prod));
+    card.querySelector('.modal-trigger')?.addEventListener('click', () => openProductModal(prod));
+  });
 }
 
 // ============================================================================
@@ -254,6 +338,10 @@ function setupAdminCRUD() {
   const previewImg = document.querySelector('#preview-image');
   const previewPlaceholder = document.querySelector('#preview-placeholder');
 
+  const searchInput = document.querySelector('#admin-search-input');
+  const countBadge = document.querySelector('#admin-product-count');
+  const resetBtn = document.querySelector('#admin-reset-btn');
+
   let currentImageData = '';
 
   // Actualizar la previsualización de imagen
@@ -294,35 +382,57 @@ function setupAdminCRUD() {
     }
   });
 
-  // Renderizar la lista de productos en el admin
+  // Renderizar la lista de productos en el admin (con buscador y contador)
   function renderList() {
     if (!productList) return;
-    const products = getProducts();
+    const allProducts = getProducts();
+    const query = (searchInput?.value || '').toLowerCase().trim();
 
-    if (products.length === 0) {
-      productList.innerHTML = '<p class="empty-state">No hay productos en la carta actualmente.</p>';
+    const filtered = query
+      ? allProducts.filter(p => 
+          (p.name || '').toLowerCase().includes(query) || 
+          (p.category || '').toLowerCase().includes(query) ||
+          (p.tag || '').toLowerCase().includes(query) ||
+          (p.description || '').toLowerCase().includes(query)
+        )
+      : allProducts;
+
+    if (countBadge) {
+      countBadge.textContent = query 
+        ? `${filtered.length} de ${allProducts.length} dulces`
+        : `${allProducts.length} dulces en carta`;
+    }
+
+    if (filtered.length === 0) {
+      productList.innerHTML = query 
+        ? `<p class="empty-state">No se encontraron dulces que coincidan con "${escapeHtml(query)}".</p>`
+        : '<p class="empty-state">No hay productos en la carta actualmente.</p>';
       return;
     }
 
-    productList.innerHTML = products.map((prod, index) => `
-      <article class="admin-item-row">
-        <img class="admin-item-thumb" 
-             src="${escapeHtml(prod.image || 'https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=200&q=80')}" 
-             alt="${escapeHtml(prod.name)}" />
-        <div class="admin-item-details">
-          <h4>${escapeHtml(prod.name)}</h4>
-          <p>${escapeHtml(prod.description)}</p>
-          <div class="admin-item-meta">
-            <span class="badge-kind">${escapeHtml(prod.category)}</span>
-            <span class="admin-item-price">${escapeHtml(prod.price || 'Consultar')}</span>
+    productList.innerHTML = filtered.map(prod => {
+      const actualIndex = allProducts.indexOf(prod);
+      return `
+        <article class="admin-item-row">
+          <img class="admin-item-thumb" 
+               src="${escapeHtml(prod.image || 'https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=200&q=80')}" 
+               alt="${escapeHtml(prod.name)}" />
+          <div class="admin-item-details">
+            <h4>${escapeHtml(prod.name)}</h4>
+            <p>${escapeHtml(prod.description)}</p>
+            <div class="admin-item-meta">
+              <span class="badge-kind" style="position: static;">${escapeHtml(prod.category)}</span>
+              ${prod.tag ? `<span class="badge-tag" style="position: static;">${escapeHtml(prod.tag)}</span>` : ''}
+              <span class="admin-item-price">${escapeHtml(prod.price || 'Consultar')}</span>
+            </div>
           </div>
-        </div>
-        <div class="admin-item-actions">
-          <button type="button" class="btn-icon btn-edit" data-edit="${index}" title="Editar dulce">✎</button>
-          <button type="button" class="btn-icon btn-delete" data-delete="${index}" title="Eliminar dulce">✕</button>
-        </div>
-      </article>
-    `).join('');
+          <div class="admin-item-actions">
+            <button type="button" class="btn-icon btn-edit" data-edit="${actualIndex}" title="Editar dulce">✎</button>
+            <button type="button" class="btn-icon btn-delete" data-delete="${actualIndex}" title="Eliminar dulce">✕</button>
+          </div>
+        </article>
+      `;
+    }).join('');
 
     // Asignar listeners de edición
     productList.querySelectorAll('[data-edit]').forEach(btn => {
@@ -349,6 +459,20 @@ function setupAdminCRUD() {
     });
   }
 
+  // Listener para el buscador en tiempo real
+  searchInput?.addEventListener('input', renderList);
+
+  // Botón para restaurar carta original
+  resetBtn?.addEventListener('click', () => {
+    if (confirm('¿Deseas restaurar la carta a los dulces de ejemplo iniciales? Se recuperarán los 6 productos originales.')) {
+      saveProducts(DEFAULT_PRODUCTS);
+      if (searchInput) searchInput.value = '';
+      resetForm();
+      renderList();
+      showToast('Carta de dulces restaurada con éxito ✨');
+    }
+  });
+
   // Activar modo edición
   function startEditing(index) {
     const products = getProducts();
@@ -358,6 +482,8 @@ function setupAdminCRUD() {
     if (editIndexInput) editIndexInput.value = String(index);
     document.querySelector('[name="name"]').value = prod.name || '';
     document.querySelector('[name="category"]').value = prod.category || 'Tortas';
+    const tagSelect = document.querySelector('[name="tag"]');
+    if (tagSelect) tagSelect.value = prod.tag || '';
     document.querySelector('[name="price"]').value = prod.price || '';
     document.querySelector('[name="description"]').value = prod.description || '';
     
@@ -393,6 +519,7 @@ function setupAdminCRUD() {
     const productPayload = {
       name: data.get('name')?.toString().trim(),
       category: data.get('category')?.toString().trim(),
+      tag: data.get('tag')?.toString().trim() || '',
       price: data.get('price')?.toString().trim() || 'Consultar',
       description: data.get('description')?.toString().trim(),
       image: currentImageData || (urlInput?.value.trim()) || 'https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=700&q=80'
