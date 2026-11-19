@@ -19,6 +19,18 @@ Sitio web oficial de **Coco's Bakery**, pastelería artesanal y repostería mág
 
 ---
 
+### 🛍️ Nuevo Sistema de Carrito de Compras & Checkout WhatsApp
+* **Canastita Dulce Persistente:** Botón de carrito en el encabezado con contador animado en tiempo real (`localStorage: cocosCart`).
+* **Botones "Agregar 🛍️" en Tarjetas y Modal:** Posibilidad de sumar productos directamente desde la grilla o ajustando la cantidad en el modal de detalles.
+* **Panel Lateral Deslizable (Cart Drawer):**
+  * Control de cantidades (`+` y `-`), cálculo automático de subtotales y total general.
+  * Formulario de entrega: Selección entre *Retiro en taller* o *Envío a domicilio* (con campo dinámico de dirección).
+  * Opciones de pago: *Transferencia / Mercado Pago* (con Alias para copiar al portapapeles) o *Efectivo*.
+  * Campo para aclaraciones o dedicatorias especiales.
+* **Generador de Pedido a WhatsApp:** Envío estructurado del pedido directo al número oficial **+54 3442 472867** (`5493442472867`), detallando items, cantidades, precios, nombre del cliente y método de entrega.
+
+---
+
 ### 👑 Panel de Administración Interactivo
 * **Área Privada (`admin.html`):** Pantalla de ingreso protegida con clave (`coco`).
 * **Gestión Completa de Productos (CRUD en tiempo real):**

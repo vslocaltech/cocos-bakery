@@ -1,9 +1,19 @@
 /**
  * ============================================================================
- * COCO'S BAKERY — SCRIPT PRINCIPAL & GESTOR DE PRODUCTOS
+ * COCO'S BAKERY — SCRIPT PRINCIPAL, GESTOR DE PRODUCTOS & CARRITO DE COMPRAS
  * Pastelería de Fantasía
  * ============================================================================
  */
+
+// Teléfono oficial para pedidos por WhatsApp (+54 3442 472867 -> formato internacional: 5493442472867)
+const BAKERY_PHONE = "5493442472867";
+
+// Datos bancarios para transferencias / pagos
+const BAKERY_PAYMENT_INFO = {
+  alias: "cocos.bakery.dulce",
+  titular: "Coco's Bakery - Pastelería",
+  banco: "Mercado Pago / Banco"
+};
 
 // Productos iniciales por defecto (Pastelería de fantasía)
 const DEFAULT_PRODUCTS = [
@@ -21,7 +31,7 @@ const DEFAULT_PRODUCTS = [
     tag: "Más pedido",
     price: "$18.500",
     description: "Bizcochuelo de vainilla bourbon relleno de crema chantilly, frutos del bosque y decoración vintage con moños.",
-    image: "https://images.unsplash.com/photo-1535141192574-5d4897c13136?auto=format&fit=crop&w=700&q=80"
+    image: "https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=700&q=80"
   },
   {
     name: "Bocados de Cacao Real & Menta",
@@ -57,7 +67,9 @@ const DEFAULT_PRODUCTS = [
   }
 ];
 
-// Obtener productos desde localStorage (o inicializar con los predeterminados)
+// ============================================================================
+// PRODUCTOS: OBTENER Y GUARDAR (localStorage)
+// ============================================================================
 function getProducts() {
   const stored = localStorage.getItem('cocosProducts');
   if (!stored) {
@@ -72,13 +84,458 @@ function getProducts() {
   }
 }
 
-// Guardar productos en localStorage
 function saveProducts(products) {
   localStorage.setItem('cocosProducts', JSON.stringify(products));
 }
 
+// Utilidades de precio
+function parsePrice(priceStr) {
+  if (!priceStr || typeof priceStr !== 'string') return 0;
+  const cleaned = priceStr.replace(/[^0-9]/g, '');
+  return cleaned ? parseInt(cleaned, 10) : 0;
+}
+
+function formatPrice(amount) {
+  if (!amount || amount <= 0) return 'A consultar';
+  return '$ ' + amount.toLocaleString('es-AR');
+}
+
 // ============================================================================
-// NAVEGACIÓN Y MENÚ MÓVIL
+// SISTEMA DE CARRITO DE COMPRAS (localStorage: 'cocosCart')
+// ============================================================================
+function getCart() {
+  try {
+    const stored = localStorage.getItem('cocosCart');
+    return stored ? JSON.parse(stored) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveCart(cart) {
+  localStorage.setItem('cocosCart', JSON.stringify(cart));
+  updateCartBadges();
+  renderCartDrawer();
+}
+
+function addToCart(product, quantity = 1) {
+  const cart = getCart();
+  const existing = cart.find(item => item.name === product.name);
+  if (existing) {
+    existing.quantity += quantity;
+  } else {
+    cart.push({
+      name: product.name,
+      category: product.category || 'Dulces',
+      tag: product.tag || '',
+      price: product.price || 'Consultar',
+      image: product.image || 'https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=400&q=80',
+      quantity: quantity
+    });
+  }
+  saveCart(cart);
+  showToast(`¡"${product.name}" agregado a tu canasta! 🛍️`);
+}
+
+function updateCartItemQty(index, delta) {
+  const cart = getCart();
+  if (cart[index]) {
+    cart[index].quantity += delta;
+    if (cart[index].quantity <= 0) {
+      const removed = cart.splice(index, 1);
+      showToast(`"${removed[0]?.name}" eliminado.`);
+    }
+    saveCart(cart);
+  }
+}
+
+function removeCartItem(index) {
+  const cart = getCart();
+  if (cart[index]) {
+    const removed = cart.splice(index, 1);
+    saveCart(cart);
+    showToast(`"${removed[0]?.name}" eliminado.`);
+  }
+}
+
+function clearCart() {
+  if (confirm('¿Deseas vaciar todos los dulces de tu canastita?')) {
+    saveCart([]);
+    showToast('Canasta vaciada.');
+  }
+}
+
+function getCartTotals() {
+  const cart = getCart();
+  let totalAmount = 0;
+  let totalItems = 0;
+  let hasInquiry = false;
+
+  cart.forEach(item => {
+    totalItems += item.quantity;
+    const priceNum = parsePrice(item.price);
+    if (priceNum > 0) {
+      totalAmount += priceNum * item.quantity;
+    } else {
+      hasInquiry = true;
+    }
+  });
+
+  return { totalAmount, totalItems, hasInquiry };
+}
+
+function updateCartBadges() {
+  const { totalItems } = getCartTotals();
+  document.querySelectorAll('.cart-badge-count').forEach(el => {
+    el.textContent = String(totalItems);
+    el.style.display = totalItems > 0 ? 'inline-flex' : 'none';
+  });
+
+  const cartNavBtn = document.querySelector('#cart-nav-btn');
+  if (cartNavBtn) {
+    cartNavBtn.classList.toggle('has-items', totalItems > 0);
+  }
+}
+
+// ============================================================================
+// INICIALIZACIÓN DEL DRAWER / PANEL LATERAL DEL CARRITO
+// ============================================================================
+function initCartDrawer() {
+  // Crear elementos del drawer si no existen
+  if (!document.querySelector('#cart-drawer')) {
+    const drawerHtml = `
+      <div id="cart-backdrop" class="cart-backdrop" aria-hidden="true"></div>
+      <aside id="cart-drawer" class="cart-drawer" role="dialog" aria-modal="true" aria-labelledby="cart-drawer-title">
+        <header class="cart-header">
+          <div class="cart-header-title">
+            <span class="cart-header-icon">🛍️</span>
+            <div>
+              <h3 id="cart-drawer-title">Tu Canastita Dulce</h3>
+              <p class="cart-header-sub">Pastelería artesanal hecha con cariño</p>
+            </div>
+          </div>
+          <button type="button" class="cart-close-btn" id="cart-close-btn" aria-label="Cerrar canasta">✕</button>
+        </header>
+
+        <div class="cart-body" id="cart-body">
+          <!-- Renderizado dinámicamente con renderCartDrawer() -->
+        </div>
+
+        <footer class="cart-footer" id="cart-footer">
+          <!-- Renderizado dinámicamente con renderCartDrawer() -->
+        </footer>
+      </aside>
+    `;
+    document.body.insertAdjacentHTML('beforeend', drawerHtml);
+
+    // Eventos de apertura/cierre
+    document.querySelector('#cart-close-btn')?.addEventListener('click', closeCartDrawer);
+    document.querySelector('#cart-backdrop')?.addEventListener('click', closeCartDrawer);
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && isCartOpen()) closeCartDrawer();
+    });
+  }
+
+  // Inyectar botón de carrito en el header si existe navbar
+  const header = document.querySelector('.site-header');
+  if (header && !document.querySelector('#cart-nav-btn')) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'cart-nav-btn';
+    btn.className = 'cart-nav-btn';
+    btn.setAttribute('aria-label', 'Ver carrito de compras');
+    btn.innerHTML = `
+      <span class="cart-btn-icon">🛍️</span>
+      <span class="cart-btn-label">Canasta</span>
+      <span class="cart-badge-count">0</span>
+    `;
+    btn.addEventListener('click', openCartDrawer);
+
+    // Ubicar antes del botón de menú móvil
+    const menuBtn = header.querySelector('.menu-button');
+    if (menuBtn) {
+      header.insertBefore(btn, menuBtn);
+    } else {
+      header.appendChild(btn);
+    }
+  }
+
+  updateCartBadges();
+  renderCartDrawer();
+}
+
+function isCartOpen() {
+  return document.querySelector('#cart-drawer')?.classList.contains('open');
+}
+
+function openCartDrawer() {
+  const drawer = document.querySelector('#cart-drawer');
+  const backdrop = document.querySelector('#cart-backdrop');
+  if (drawer && backdrop) {
+    drawer.classList.add('open');
+    backdrop.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    renderCartDrawer();
+  }
+}
+
+function closeCartDrawer() {
+  const drawer = document.querySelector('#cart-drawer');
+  const backdrop = document.querySelector('#cart-backdrop');
+  if (drawer && backdrop) {
+    drawer.classList.remove('open');
+    backdrop.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+}
+
+function renderCartDrawer() {
+  const cartBody = document.querySelector('#cart-body');
+  const cartFooter = document.querySelector('#cart-footer');
+  if (!cartBody || !cartFooter) return;
+
+  const cart = getCart();
+  const { totalAmount, totalItems, hasInquiry } = getCartTotals();
+
+  if (cart.length === 0) {
+    cartBody.innerHTML = `
+      <div class="cart-empty-state">
+        <span class="empty-icon">🧁</span>
+        <h4>Tu canastita está vacía</h4>
+        <p>Aún no agregaste ninguna delicia. ¡Explorá nuestra carta y elegí tus dulces favoritos!</p>
+        <a href="catalogo.html" class="button button-pink" onclick="closeCartDrawer()">
+          Ver catálogo de dulces <span>✨</span>
+        </a>
+      </div>
+    `;
+    cartFooter.innerHTML = '';
+    return;
+  }
+
+  // Lista de items
+  const itemsHtml = cart.map((item, idx) => {
+    const priceNum = parsePrice(item.price);
+    const itemTotal = priceNum > 0 ? formatPrice(priceNum * item.quantity) : 'A consultar';
+
+    return `
+      <article class="cart-item" data-idx="${idx}">
+        <img class="cart-item-img" src="${escapeHtml(item.image)}" alt="${escapeHtml(item.name)}" />
+        <div class="cart-item-info">
+          <div class="cart-item-top">
+            <h5 class="cart-item-title">${escapeHtml(item.name)}</h5>
+            <button type="button" class="cart-item-del" data-del="${idx}" title="Eliminar de la canasta" aria-label="Eliminar ${escapeHtml(item.name)}">✕</button>
+          </div>
+          <p class="cart-item-unit">${escapeHtml(item.price)} c/u</p>
+          <div class="cart-item-bottom">
+            <div class="qty-control">
+              <button type="button" class="qty-btn" data-minus="${idx}" aria-label="Restar uno">-</button>
+              <span class="qty-val">${item.quantity}</span>
+              <button type="button" class="qty-btn" data-plus="${idx}" aria-label="Sumar uno">+</button>
+            </div>
+            <span class="cart-item-subtotal">${itemTotal}</span>
+          </div>
+        </div>
+      </article>
+    `;
+  }).join('');
+
+  // Formulario con datos de entrega y pago
+  const formHtml = `
+    <div class="cart-checkout-box">
+      <h5 class="checkout-box-title">Datos para tu pedido 🎀</h5>
+
+      <div class="cart-field">
+        <label for="order-name">Tu nombre y apellido *</label>
+        <input type="text" id="order-name" class="cart-input" placeholder="Ej. Valentina Gómez" required />
+      </div>
+
+      <div class="cart-field">
+        <label>Forma de entrega *</label>
+        <div class="delivery-toggle-group">
+          <label class="radio-card">
+            <input type="radio" name="delivery-type" value="retiro" checked />
+            <span class="radio-label">
+              <strong>Retiro en taller</strong>
+              <small>Sin costo adicional</small>
+            </span>
+          </label>
+          <label class="radio-card">
+            <input type="radio" name="delivery-type" value="envio" />
+            <span class="radio-label">
+              <strong>Envío a domicilio</strong>
+              <small>Coordinar costo por zona</small>
+            </span>
+          </label>
+        </div>
+      </div>
+
+      <div class="cart-field hidden" id="address-field-wrap">
+        <label for="order-address">Dirección de entrega *</label>
+        <input type="text" id="order-address" class="cart-input" placeholder="Calle, altura, piso/dpto y localidad" />
+      </div>
+
+      <div class="cart-field">
+        <label>Método de pago preferido</label>
+        <div class="payment-options-grid">
+          <label class="radio-card mini">
+            <input type="radio" name="payment-method" value="Transferencia / Mercado Pago" checked />
+            <span class="radio-label">📲 Transferencia / Alias</span>
+          </label>
+          <label class="radio-card mini">
+            <input type="radio" name="payment-method" value="Efectivo al retirar" />
+            <span class="radio-label">💵 Efectivo</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Datos de transferencia bancaria -->
+      <div class="bank-info-box" id="bank-info-box">
+        <div class="bank-info-header">
+          <span>✨ Alias para transferir:</span>
+          <code class="alias-tag" id="alias-copy-btn" title="Clic para copiar">${BAKERY_PAYMENT_INFO.alias} 📋</code>
+        </div>
+        <p class="bank-info-note">Podés abonar por Mercado Pago o transferencia bancaria y enviar el comprobante por WhatsApp al confirmar.</p>
+      </div>
+
+      <div class="cart-field">
+        <label for="order-notes">Aclaraciones o fecha especial (Opcional)</label>
+        <textarea id="order-notes" class="cart-input" rows="2" placeholder="Ej. Dedicatoria en la torta, fecha y horario deseado..."></textarea>
+      </div>
+    </div>
+  `;
+
+  cartBody.innerHTML = `
+    <div class="cart-items-container">
+      ${itemsHtml}
+    </div>
+    ${formHtml}
+  `;
+
+  // Listener para copiar Alias
+  document.querySelector('#alias-copy-btn')?.addEventListener('click', () => {
+    navigator.clipboard?.writeText(BAKERY_PAYMENT_INFO.alias);
+    showToast('¡Alias copiado al portapapeles! 📋');
+  });
+
+  // Toggle para mostrar/ocultar campo de dirección
+  const deliveryRadios = cartBody.querySelectorAll('input[name="delivery-type"]');
+  const addressWrap = cartBody.querySelector('#address-field-wrap');
+  deliveryRadios.forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      if (addressWrap) {
+        addressWrap.classList.toggle('hidden', e.target.value !== 'envio');
+      }
+    });
+  });
+
+  // Listeners de cantidad y eliminar
+  cartBody.querySelectorAll('[data-minus]').forEach(btn => {
+    btn.addEventListener('click', () => updateCartItemQty(Number(btn.dataset.minus), -1));
+  });
+  cartBody.querySelectorAll('[data-plus]').forEach(btn => {
+    btn.addEventListener('click', () => updateCartItemQty(Number(btn.dataset.plus), 1));
+  });
+  cartBody.querySelectorAll('[data-del]').forEach(btn => {
+    btn.addEventListener('click', () => removeCartItem(Number(btn.dataset.del)));
+  });
+
+  // Footer con totales y botón WhatsApp
+  const totalDisplay = formatPrice(totalAmount);
+  cartFooter.innerHTML = `
+    <div class="cart-total-row">
+      <div>
+        <span class="cart-total-label">Total estimado (${totalItems} ${totalItems === 1 ? 'dulce' : 'dulces'}):</span>
+        ${hasInquiry ? '<small class="cart-inquiry-note">* Incluye productos a cotizar</small>' : ''}
+      </div>
+      <strong class="cart-total-value">${totalDisplay}</strong>
+    </div>
+
+    <div class="cart-actions-row">
+      <button type="button" class="button button-secondary btn-clear-cart" id="btn-clear-cart" title="Vaciar canasta">
+        Vaciar 🗑️
+      </button>
+      <button type="button" class="button button-pink btn-checkout-wa" id="btn-checkout-wa">
+        Enviar pedido por WhatsApp <span>📲</span>
+      </button>
+    </div>
+  `;
+
+  document.querySelector('#btn-clear-cart')?.addEventListener('click', clearCart);
+  document.querySelector('#btn-checkout-wa')?.addEventListener('click', handleWhatsAppCheckout);
+}
+
+// ============================================================================
+// ENVÍO DE PEDIDO A WHATSAPP (+54 3442 472867)
+// ============================================================================
+function handleWhatsAppCheckout() {
+  const cart = getCart();
+  if (cart.length === 0) {
+    showToast('Tu canastita está vacía.');
+    return;
+  }
+
+  const nameInput = document.querySelector('#order-name');
+  const name = nameInput?.value.trim();
+  if (!name) {
+    showToast('Por favor ingresá tu nombre antes de enviar el pedido.');
+    nameInput?.focus();
+    return;
+  }
+
+  const deliveryType = document.querySelector('input[name="delivery-type"]:checked')?.value || 'retiro';
+  const address = document.querySelector('#order-address')?.value.trim();
+  if (deliveryType === 'envio' && !address) {
+    showToast('Por favor indicá tu dirección para el envío.');
+    document.querySelector('#order-address')?.focus();
+    return;
+  }
+
+  const paymentMethod = document.querySelector('input[name="payment-method"]:checked')?.value || 'Transferencia / Mercado Pago';
+  const notes = document.querySelector('#order-notes')?.value.trim();
+  const { totalAmount, hasInquiry } = getCartTotals();
+
+  // Armar lista formateada de productos
+  const itemsText = cart.map(item => {
+    const unitNum = parsePrice(item.price);
+    const subtotalText = unitNum > 0 ? formatPrice(unitNum * item.quantity) : 'A consultar';
+    return `• ${item.quantity}x ${item.name} (${item.price} c/u) = ${subtotalText}`;
+  }).join('\n');
+
+  const deliveryText = deliveryType === 'envio'
+    ? `Envío a domicilio (${address})`
+    : 'Retiro en el taller (Sin costo)';
+
+  const totalText = totalAmount > 0 ? formatPrice(totalAmount) : 'A confirmar';
+
+  // Mensaje estructurado y formal para WhatsApp
+  const message = [
+    `¡Hola Coco's Bakery! 🧁 Quiero realizar el siguiente pedido:`,
+    ``,
+    `📋 DETALLE DE MI PEDIDO:`,
+    itemsText,
+    ``,
+    `💰 TOTAL ESTIMADO: ${totalText}${hasInquiry ? ' (con productos a cotizar)' : ''}`,
+    ``,
+    `👤 DATOS PARA LA ENTREGA:`,
+    `• Nombre: ${name}`,
+    `• Entrega: ${deliveryText}`,
+    `• Forma de pago: ${paymentMethod}`,
+    notes ? `• Aclaraciones: ${notes}` : null,
+    ``,
+    `¡Muchas gracias! ✨ Espero tu confirmación.`
+  ].filter(line => line !== null).join('\n');
+
+  // URL oficial de WhatsApp hacia +54 3442 472867 (5493442472867)
+  const waUrl = `https://wa.me/${BAKERY_PHONE}?text=${encodeURIComponent(message)}`;
+
+  // Abrir WhatsApp en nueva pestaña
+  window.open(waUrl, '_blank', 'noopener,noreferrer');
+
+  showToast('¡Redirigiendo a WhatsApp con tu pedido preparado! 📲');
+}
+
+// ============================================================================
+// NAVEGACIÓN Y EVENTOS GENERALES
 // ============================================================================
 document.addEventListener('DOMContentLoaded', () => {
   const menuButton = document.querySelector('.menu-button');
@@ -100,7 +557,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Renderizar vistas según la página activa
+  // Inicializar componentes globales
+  initCartDrawer();
   initCataloguePage();
   initIndexPage();
   initAdminPage();
@@ -118,6 +576,8 @@ function openProductModal(prod) {
     document.body.appendChild(overlay);
   }
 
+  let currentModalQty = 1;
+
   overlay.innerHTML = `
     <div class="product-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title-elem">
       <button type="button" class="modal-close-btn" aria-label="Cerrar ventana">✕</button>
@@ -134,14 +594,29 @@ function openProductModal(prod) {
           <h3 class="modal-title" id="modal-title-elem">${escapeHtml(prod.name)}</h3>
           <p class="modal-desc">${escapeHtml(prod.description)}</p>
         </div>
-        <div class="modal-price-box">
-          <span class="modal-price">${escapeHtml(prod.price || 'Consultar')}</span>
-          <a href="https://wa.me/?text=${encodeURIComponent('¡Hola Coco\'s Bakery! Quisiera pedir / consultar por: ' + prod.name)}" 
-             target="_blank" 
-             rel="noopener noreferrer" 
-             class="button button-pink">
-            Pedir por WhatsApp <span>♥</span>
-          </a>
+
+        <div class="modal-actions-box">
+          <div class="modal-price-row">
+            <span class="modal-price">${escapeHtml(prod.price || 'Consultar')}</span>
+            <div class="qty-control modal-qty">
+              <button type="button" class="qty-btn" id="modal-qty-minus" aria-label="Restar">-</button>
+              <span class="qty-val" id="modal-qty-display">1</span>
+              <button type="button" class="qty-btn" id="modal-qty-plus" aria-label="Sumar">+</button>
+            </div>
+          </div>
+
+          <div class="modal-buttons-group">
+            <button type="button" class="button button-pink" id="modal-add-cart-btn" style="width: 100%;">
+              Agregar a la canasta <span>🛍️</span>
+            </button>
+            <a href="https://wa.me/${BAKERY_PHONE}?text=${encodeURIComponent('¡Hola Coco\'s Bakery! Quisiera consultar por el dulce: ' + prod.name)}" 
+               target="_blank" 
+               rel="noopener noreferrer" 
+               class="button button-secondary" 
+               style="width: 100%; font-size: 13px;">
+              Consultar por WhatsApp <span>💬</span>
+            </a>
+          </div>
         </div>
       </div>
     </div>
@@ -153,6 +628,30 @@ function openProductModal(prod) {
   closeBtn?.addEventListener('click', closeModal);
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) closeModal();
+  });
+
+  // Selector de cantidad en modal
+  const qtyMinus = overlay.querySelector('#modal-qty-minus');
+  const qtyPlus = overlay.querySelector('#modal-qty-plus');
+  const qtyDisplay = overlay.querySelector('#modal-qty-display');
+  const addBtn = overlay.querySelector('#modal-add-cart-btn');
+
+  qtyMinus?.addEventListener('click', () => {
+    if (currentModalQty > 1) {
+      currentModalQty--;
+      qtyDisplay.textContent = String(currentModalQty);
+    }
+  });
+
+  qtyPlus?.addEventListener('click', () => {
+    currentModalQty++;
+    qtyDisplay.textContent = String(currentModalQty);
+  });
+
+  addBtn?.addEventListener('click', () => {
+    addToCart(prod, currentModalQty);
+    closeModal();
+    openCartDrawer();
   });
 
   function handleKeydown(e) {
@@ -188,7 +687,10 @@ function initCataloguePage() {
       grid.innerHTML = `
         <div style="grid-column: 1 / -1; text-align: center; padding: 50px 20px;">
           <p style="font-size: 20px; color: var(--choco-soft);">No hay dulces disponibles en esta categoría por el momento.</p>
-          <a href="index.html#contacto" class="button button-pink" style="margin-top: 15px;">Hacer un pedido especial <span>✦</span></a>
+          <a href="https://wa.me/${BAKERY_PHONE}?text=¡Hola%20Coco's%20Bakery!%20Quisiera%20hacer%20un%20pedido%20especial" 
+             target="_blank" rel="noopener noreferrer" class="button button-pink" style="margin-top: 15px;">
+            Hacer un pedido especial <span>✦</span>
+          </a>
         </div>
       `;
       return;
@@ -209,12 +711,11 @@ function initCataloguePage() {
           <p class="product-desc">${escapeHtml(prod.description)}</p>
           <div class="product-footer">
             <span class="product-price">${escapeHtml(prod.price || 'Consultar')}</span>
-            <a href="https://wa.me/?text=${encodeURIComponent('¡Hola Coco\'s Bakery! Quisiera consultar por el dulce: ' + prod.name)}" 
-               target="_blank" 
-               rel="noopener noreferrer" 
-               class="order-btn">
-              Pedir <span>♥</span>
-            </a>
+            <div class="product-card-actions">
+              <button type="button" class="btn-card-add" data-add="${idx}" title="Agregar a la canasta">
+                Agregar <span>🛍️</span>
+              </button>
+            </div>
           </div>
         </div>
       </article>
@@ -225,6 +726,10 @@ function initCataloguePage() {
       const prod = filtered[i];
       card.querySelector('.product-media')?.addEventListener('click', () => openProductModal(prod));
       card.querySelector('.product-title')?.addEventListener('click', () => openProductModal(prod));
+      card.querySelector('[data-add]')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        addToCart(prod, 1);
+      });
     });
   }
 
@@ -262,7 +767,11 @@ function initIndexPage() {
         <p class="product-desc">${escapeHtml(prod.description)}</p>
         <div class="product-footer">
           <span class="product-price">${escapeHtml(prod.price || 'Consultar')}</span>
-          <button type="button" class="order-btn modal-trigger">Ver dulce <span>✨</span></button>
+          <div class="product-card-actions">
+            <button type="button" class="btn-card-add" data-add-featured="${idx}" title="Agregar a la canasta">
+              Agregar <span>🛍️</span>
+            </button>
+          </div>
         </div>
       </div>
     </article>
@@ -272,7 +781,10 @@ function initIndexPage() {
     const prod = products[i];
     card.querySelector('.product-media')?.addEventListener('click', () => openProductModal(prod));
     card.querySelector('.product-title')?.addEventListener('click', () => openProductModal(prod));
-    card.querySelector('.modal-trigger')?.addEventListener('click', () => openProductModal(prod));
+    card.querySelector('[data-add-featured]')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      addToCart(prod, 1);
+    });
   });
 }
 
@@ -344,7 +856,6 @@ function setupAdminCRUD() {
 
   let currentImageData = '';
 
-  // Actualizar la previsualización de imagen
   function updateImagePreview(src) {
     if (src && src.trim()) {
       previewImg.src = src;
@@ -359,7 +870,6 @@ function setupAdminCRUD() {
     }
   }
 
-  // Carga desde archivo local (FileReader -> Base64)
   fileInput?.addEventListener('change', (e) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -373,7 +883,6 @@ function setupAdminCRUD() {
     }
   });
 
-  // Carga desde URL directa
   urlInput?.addEventListener('input', (e) => {
     const url = e.target.value.trim();
     if (url) {
@@ -382,7 +891,6 @@ function setupAdminCRUD() {
     }
   });
 
-  // Renderizar la lista de productos en el admin (con buscador y contador)
   function renderList() {
     if (!productList) return;
     const allProducts = getProducts();
@@ -434,7 +942,6 @@ function setupAdminCRUD() {
       `;
     }).join('');
 
-    // Asignar listeners de edición
     productList.querySelectorAll('[data-edit]').forEach(btn => {
       btn.addEventListener('click', () => {
         const idx = Number(btn.dataset.edit);
@@ -442,7 +949,6 @@ function setupAdminCRUD() {
       });
     });
 
-    // Asignar listeners de eliminación
     productList.querySelectorAll('[data-delete]').forEach(btn => {
       btn.addEventListener('click', () => {
         const idx = Number(btn.dataset.delete);
@@ -459,10 +965,8 @@ function setupAdminCRUD() {
     });
   }
 
-  // Listener para el buscador en tiempo real
   searchInput?.addEventListener('input', renderList);
 
-  // Botón para restaurar carta original
   resetBtn?.addEventListener('click', () => {
     if (confirm('¿Deseas restaurar la carta a los dulces de ejemplo iniciales? Se recuperarán los 6 productos originales.')) {
       saveProducts(DEFAULT_PRODUCTS);
@@ -473,7 +977,6 @@ function setupAdminCRUD() {
     }
   });
 
-  // Activar modo edición
   function startEditing(index) {
     const products = getProducts();
     const prod = products[index];
@@ -497,7 +1000,6 @@ function setupAdminCRUD() {
     productForm?.scrollIntoView({ behavior: 'smooth' });
   }
 
-  // Cancelar modo edición
   function resetForm() {
     productForm?.reset();
     if (editIndexInput) editIndexInput.value = '-1';
@@ -509,7 +1011,6 @@ function setupAdminCRUD() {
 
   cancelBtn?.addEventListener('click', resetForm);
 
-  // Enviar formulario (crear o editar)
   productForm?.addEventListener('submit', (e) => {
     e.preventDefault();
     const data = new FormData(productForm);
@@ -526,12 +1027,10 @@ function setupAdminCRUD() {
     };
 
     if (editIdx >= 0 && editIdx < products.length) {
-      // Actualización
       products[editIdx] = productPayload;
       saveProducts(products);
       showToast(`¡"${productPayload.name}" actualizado con éxito! ✨`);
     } else {
-      // Nuevo producto
       products.unshift(productPayload);
       saveProducts(products);
       showToast(`¡"${productPayload.name}" agregado a la carta! 🎀`);
