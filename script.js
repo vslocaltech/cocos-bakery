@@ -90,8 +90,10 @@ function saveProducts(products) {
 
 // Utilidades de precio
 function parsePrice(priceStr) {
+  if (typeof priceStr === 'number') return priceStr > 0 ? Math.round(priceStr) : 0;
   if (!priceStr || typeof priceStr !== 'string') return 0;
-  const cleaned = priceStr.replace(/[^0-9]/g, '');
+  const withoutCents = priceStr.trim().replace(/,\d{1,2}$/, '');
+  const cleaned = withoutCents.replace(/[^0-9]/g, '');
   return cleaned ? parseInt(cleaned, 10) : 0;
 }
 
@@ -103,10 +105,46 @@ function formatPrice(amount) {
 // ============================================================================
 // SISTEMA DE CARRITO DE COMPRAS (localStorage: 'cocosCart')
 // ============================================================================
+const CART_FORM_STORAGE_KEY = 'cocosCartForm';
+
+function getCartFormState() {
+  const defaults = {
+    name: '',
+    deliveryType: 'retiro',
+    address: '',
+    paymentMethod: 'Transferencia / Mercado Pago',
+    notes: ''
+  };
+  try {
+    const stored = sessionStorage.getItem(CART_FORM_STORAGE_KEY);
+    return stored ? { ...defaults, ...JSON.parse(stored) } : defaults;
+  } catch (e) {
+    return defaults;
+  }
+}
+
+function saveCartFormState(partial) {
+  const current = getCartFormState();
+  const updated = { ...current, ...partial };
+  try {
+    sessionStorage.setItem(CART_FORM_STORAGE_KEY, JSON.stringify(updated));
+  } catch (e) {
+    // Ignorar errores de sessionStorage
+  }
+  return updated;
+}
+
 function getCart() {
   try {
     const stored = localStorage.getItem('cocosCart');
-    return stored ? JSON.parse(stored) : [];
+    const parsed = stored ? JSON.parse(stored) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter(item => item && typeof item.name === 'string')
+      .map(item => ({
+        ...item,
+        quantity: Math.max(1, parseInt(item.quantity, 10) || 1)
+      }));
   } catch (e) {
     return [];
   }
@@ -119,10 +157,11 @@ function saveCart(cart) {
 }
 
 function addToCart(product, quantity = 1) {
+  const qtyToAdd = Math.max(1, parseInt(quantity, 10) || 1);
   const cart = getCart();
   const existing = cart.find(item => item.name === product.name);
   if (existing) {
-    existing.quantity += quantity;
+    existing.quantity = (parseInt(existing.quantity, 10) || 0) + qtyToAdd;
   } else {
     cart.push({
       name: product.name,
@@ -130,7 +169,7 @@ function addToCart(product, quantity = 1) {
       tag: product.tag || '',
       price: product.price || 'Consultar',
       image: product.image || 'https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=400&q=80',
-      quantity: quantity
+      quantity: qtyToAdd
     });
   }
   saveCart(cart);
@@ -289,10 +328,70 @@ function closeCartDrawer() {
   }
 }
 
+function syncCartFormFromDOM() {
+  const cartBody = document.querySelector('#cart-body');
+  if (!cartBody || !cartBody.querySelector('#order-name')) return getCartFormState();
+
+  const nameInput = cartBody.querySelector('#order-name');
+  const deliveryRadio = cartBody.querySelector('input[name="delivery-type"]:checked');
+  const addressInput = cartBody.querySelector('#order-address');
+  const paymentRadio = cartBody.querySelector('input[name="payment-method"]:checked');
+  const notesInput = cartBody.querySelector('#order-notes');
+
+  return saveCartFormState({
+    name: nameInput ? nameInput.value : '',
+    deliveryType: deliveryRadio ? deliveryRadio.value : 'retiro',
+    address: addressInput ? addressInput.value : '',
+    paymentMethod: paymentRadio ? paymentRadio.value : 'Transferencia / Mercado Pago',
+    notes: notesInput ? notesInput.value : ''
+  });
+}
+
+async function copyTextToClipboard(text) {
+  if (!text) return false;
+
+  // 1. Intentar con la API moderna de portapapeles (contextos seguros / localhost / HTTPS)
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (err) {
+      // Si falla por permisos o contexto file://, continuar al fallback
+    }
+  }
+
+  // 2. Fallback universal con textarea temporal (funciona en file://, HTTP y todos los navegadores)
+  try {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.setAttribute('readonly', '');
+    textArea.style.position = 'fixed';
+    textArea.style.top = '-9999px';
+    textArea.style.left = '-9999px';
+    textArea.style.opacity = '0';
+    document.body.appendChild(textArea);
+
+    textArea.focus();
+    textArea.select();
+    textArea.setSelectionRange(0, text.length);
+
+    const copied = document.execCommand('copy');
+    document.body.removeChild(textArea);
+    if (copied) return true;
+  } catch (err) {
+    // Fallback final
+  }
+
+  return false;
+}
+
 function renderCartDrawer() {
   const cartBody = document.querySelector('#cart-body');
   const cartFooter = document.querySelector('#cart-footer');
   if (!cartBody || !cartFooter) return;
+
+  // Preservar lo que el usuario haya escrito antes de re-renderizar
+  const formState = syncCartFormFromDOM();
 
   const cart = getCart();
   const { totalAmount, totalItems, hasInquiry } = getCartTotals();
@@ -303,14 +402,24 @@ function renderCartDrawer() {
         <span class="empty-icon">🧁</span>
         <h4>Tu canastita está vacía</h4>
         <p>Aún no agregaste ninguna delicia. ¡Explorá nuestra carta y elegí tus dulces favoritos!</p>
-        <a href="catalogo.html" class="button button-pink" onclick="closeCartDrawer()">
+        <a href="catalogo.html" class="button button-pink" id="cart-empty-catalogue-btn">
           Ver catálogo de dulces <span>✨</span>
         </a>
       </div>
     `;
     cartFooter.innerHTML = '';
+    cartFooter.classList.add('hidden');
+
+    cartBody.querySelector('#cart-empty-catalogue-btn')?.addEventListener('click', (e) => {
+      if (window.location.pathname.endsWith('catalogo.html')) {
+        e.preventDefault();
+      }
+      closeCartDrawer();
+    });
     return;
   }
+
+  cartFooter.classList.remove('hidden');
 
   // Lista de items
   const itemsHtml = cart.map((item, idx) => {
@@ -339,28 +448,31 @@ function renderCartDrawer() {
     `;
   }).join('');
 
+  const isEnvio = formState.deliveryType === 'envio';
+  const isEfectivo = formState.paymentMethod === 'Efectivo al retirar';
+
   // Formulario con datos de entrega y pago
   const formHtml = `
     <div class="cart-checkout-box">
       <h5 class="checkout-box-title">Datos para tu pedido 🎀</h5>
 
       <div class="cart-field">
-        <label for="order-name">Tu nombre y apellido *</label>
-        <input type="text" id="order-name" class="cart-input" placeholder="Ej. Valentina Gómez" required />
+        <label for="order-name">Tu nombre y apellido</label>
+        <input type="text" id="order-name" class="cart-input" placeholder="Ej. Valentina Gómez" value="${escapeHtml(formState.name)}" />
       </div>
 
       <div class="cart-field">
-        <label>Forma de entrega *</label>
+        <label>Forma de entrega</label>
         <div class="delivery-toggle-group">
           <label class="radio-card">
-            <input type="radio" name="delivery-type" value="retiro" checked />
+            <input type="radio" name="delivery-type" value="retiro" ${!isEnvio ? 'checked' : ''} />
             <span class="radio-label">
               <strong>Retiro en taller</strong>
               <small>Sin costo adicional</small>
             </span>
           </label>
           <label class="radio-card">
-            <input type="radio" name="delivery-type" value="envio" />
+            <input type="radio" name="delivery-type" value="envio" ${isEnvio ? 'checked' : ''} />
             <span class="radio-label">
               <strong>Envío a domicilio</strong>
               <small>Coordinar costo por zona</small>
@@ -369,20 +481,20 @@ function renderCartDrawer() {
         </div>
       </div>
 
-      <div class="cart-field hidden" id="address-field-wrap">
-        <label for="order-address">Dirección de entrega *</label>
-        <input type="text" id="order-address" class="cart-input" placeholder="Calle, altura, piso/dpto y localidad" />
+      <div class="cart-field ${isEnvio ? '' : 'hidden'}" id="address-field-wrap">
+        <label for="order-address">Dirección de entrega</label>
+        <input type="text" id="order-address" class="cart-input" placeholder="Calle, altura, piso/dpto y localidad" value="${escapeHtml(formState.address)}" />
       </div>
 
       <div class="cart-field">
         <label>Método de pago preferido</label>
         <div class="payment-options-grid">
           <label class="radio-card mini">
-            <input type="radio" name="payment-method" value="Transferencia / Mercado Pago" checked />
+            <input type="radio" name="payment-method" value="Transferencia / Mercado Pago" ${!isEfectivo ? 'checked' : ''} />
             <span class="radio-label">📲 Transferencia / Alias</span>
           </label>
           <label class="radio-card mini">
-            <input type="radio" name="payment-method" value="Efectivo al retirar" />
+            <input type="radio" name="payment-method" value="Efectivo al retirar" ${isEfectivo ? 'checked' : ''} />
             <span class="radio-label">💵 Efectivo</span>
           </label>
         </div>
@@ -392,14 +504,17 @@ function renderCartDrawer() {
       <div class="bank-info-box" id="bank-info-box">
         <div class="bank-info-header">
           <span>✨ Alias para transferir:</span>
-          <code class="alias-tag" id="alias-copy-btn" title="Clic para copiar">${BAKERY_PAYMENT_INFO.alias} 📋</code>
+          <button type="button" class="alias-tag" id="alias-copy-btn" title="Clic para copiar alias">
+            <span class="alias-text">${escapeHtml(BAKERY_PAYMENT_INFO.alias)}</span>
+            <span class="alias-copy-icon">📋</span>
+          </button>
         </div>
-        <p class="bank-info-note">Podés abonar por Mercado Pago o transferencia bancaria y enviar el comprobante por WhatsApp al confirmar.</p>
+        <p class="bank-info-note">Hacé clic en el alias para copiarlo. Podés abonar por Mercado Pago o transferencia bancaria y enviar el comprobante por WhatsApp.</p>
       </div>
 
       <div class="cart-field">
         <label for="order-notes">Aclaraciones o fecha especial (Opcional)</label>
-        <textarea id="order-notes" class="cart-input" rows="2" placeholder="Ej. Dedicatoria en la torta, fecha y horario deseado..."></textarea>
+        <textarea id="order-notes" class="cart-input" rows="2" placeholder="Ej. Dedicatoria en la torta, fecha y horario deseado...">${escapeHtml(formState.notes)}</textarea>
       </div>
     </div>
   `;
@@ -411,21 +526,46 @@ function renderCartDrawer() {
     ${formHtml}
   `;
 
-  // Listener para copiar Alias
-  document.querySelector('#alias-copy-btn')?.addEventListener('click', () => {
-    navigator.clipboard?.writeText(BAKERY_PAYMENT_INFO.alias);
-    showToast('¡Alias copiado al portapapeles! 📋');
+  // Listener para copiar Alias con soporte universal y feedback visual
+  const aliasCopyBtn = cartBody.querySelector('#alias-copy-btn');
+  aliasCopyBtn?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const copied = await copyTextToClipboard(BAKERY_PAYMENT_INFO.alias);
+    if (copied) {
+      aliasCopyBtn.classList.add('copied');
+      aliasCopyBtn.innerHTML = `<span>¡Copiado! ${escapeHtml(BAKERY_PAYMENT_INFO.alias)}</span> <span>✓</span>`;
+      showToast(`¡Alias "${BAKERY_PAYMENT_INFO.alias}" copiado al portapapeles! 📋`);
+      setTimeout(() => {
+        if (aliasCopyBtn.isConnected) {
+          aliasCopyBtn.classList.remove('copied');
+          aliasCopyBtn.innerHTML = `<span class="alias-text">${escapeHtml(BAKERY_PAYMENT_INFO.alias)}</span> <span class="alias-copy-icon">📋</span>`;
+        }
+      }, 2200);
+    } else {
+      showToast(`Alias para transferir: ${BAKERY_PAYMENT_INFO.alias}`);
+    }
   });
 
-  // Toggle para mostrar/ocultar campo de dirección
-  const deliveryRadios = cartBody.querySelectorAll('input[name="delivery-type"]');
-  const addressWrap = cartBody.querySelector('#address-field-wrap');
-  deliveryRadios.forEach(radio => {
-    radio.addEventListener('change', (e) => {
-      if (addressWrap) {
-        addressWrap.classList.toggle('hidden', e.target.value !== 'envio');
-      }
-    });
+  // Actualizar estado del formulario y link de WhatsApp en tiempo real
+  const refreshCheckoutState = () => {
+    const state = syncCartFormFromDOM();
+    const addressWrap = cartBody.querySelector('#address-field-wrap');
+    if (addressWrap) {
+      addressWrap.classList.toggle('hidden', state.deliveryType !== 'envio');
+    }
+    const checkoutLink = cartFooter.querySelector('#btn-checkout-wa');
+    if (checkoutLink) {
+      checkoutLink.href = buildWhatsAppOrderUrl();
+    }
+  };
+
+  cartBody.querySelectorAll('#order-name, #order-address, #order-notes').forEach(input => {
+    input.addEventListener('input', refreshCheckoutState);
+  });
+
+  cartBody.querySelectorAll('input[name="delivery-type"], input[name="payment-method"]').forEach(radio => {
+    radio.addEventListener('change', refreshCheckoutState);
   });
 
   // Listeners de cantidad y eliminar
@@ -439,8 +579,10 @@ function renderCartDrawer() {
     btn.addEventListener('click', () => removeCartItem(Number(btn.dataset.del)));
   });
 
-  // Footer con totales y botón WhatsApp
+  // Footer con totales y botón/enlace directo a WhatsApp
   const totalDisplay = formatPrice(totalAmount);
+  const initialWaUrl = buildWhatsAppOrderUrl();
+
   cartFooter.innerHTML = `
     <div class="cart-total-row">
       <div>
@@ -454,47 +596,29 @@ function renderCartDrawer() {
       <button type="button" class="button button-secondary btn-clear-cart" id="btn-clear-cart" title="Vaciar canasta">
         Vaciar 🗑️
       </button>
-      <button type="button" class="button button-pink btn-checkout-wa" id="btn-checkout-wa">
+      <a href="${escapeHtml(initialWaUrl)}" target="_blank" rel="noopener noreferrer" class="button button-pink btn-checkout-wa" id="btn-checkout-wa">
         Enviar pedido por WhatsApp <span>📲</span>
-      </button>
+      </a>
     </div>
   `;
 
-  document.querySelector('#btn-clear-cart')?.addEventListener('click', clearCart);
-  document.querySelector('#btn-checkout-wa')?.addEventListener('click', handleWhatsAppCheckout);
+  cartFooter.querySelector('#btn-clear-cart')?.addEventListener('click', clearCart);
+  cartFooter.querySelector('#btn-checkout-wa')?.addEventListener('click', handleWhatsAppCheckout);
 }
 
 // ============================================================================
 // ENVÍO DE PEDIDO A WHATSAPP (+54 3442 472867)
 // ============================================================================
-function handleWhatsAppCheckout() {
+function buildWhatsAppOrderUrl() {
   const cart = getCart();
-  if (cart.length === 0) {
-    showToast('Tu canastita está vacía.');
-    return;
-  }
-
-  const nameInput = document.querySelector('#order-name');
-  const name = nameInput?.value.trim();
-  if (!name) {
-    showToast('Por favor ingresá tu nombre antes de enviar el pedido.');
-    nameInput?.focus();
-    return;
-  }
-
-  const deliveryType = document.querySelector('input[name="delivery-type"]:checked')?.value || 'retiro';
-  const address = document.querySelector('#order-address')?.value.trim();
-  if (deliveryType === 'envio' && !address) {
-    showToast('Por favor indicá tu dirección para el envío.');
-    document.querySelector('#order-address')?.focus();
-    return;
-  }
-
-  const paymentMethod = document.querySelector('input[name="payment-method"]:checked')?.value || 'Transferencia / Mercado Pago';
-  const notes = document.querySelector('#order-notes')?.value.trim();
+  const state = syncCartFormFromDOM();
+  const name = (state.name || '').trim();
+  const deliveryType = state.deliveryType || 'retiro';
+  const address = (state.address || '').trim();
+  const paymentMethod = state.paymentMethod || 'Transferencia / Mercado Pago';
+  const notes = (state.notes || '').trim();
   const { totalAmount, hasInquiry } = getCartTotals();
 
-  // Armar lista formateada de productos
   const itemsText = cart.map(item => {
     const unitNum = parsePrice(item.price);
     const subtotalText = unitNum > 0 ? formatPrice(unitNum * item.quantity) : 'A consultar';
@@ -502,12 +626,11 @@ function handleWhatsAppCheckout() {
   }).join('\n');
 
   const deliveryText = deliveryType === 'envio'
-    ? `Envío a domicilio (${address})`
+    ? `Envío a domicilio (${address || 'Dirección a coordinar'})`
     : 'Retiro en el taller (Sin costo)';
 
   const totalText = totalAmount > 0 ? formatPrice(totalAmount) : 'A confirmar';
 
-  // Mensaje estructurado y formal para WhatsApp
   const message = [
     `¡Hola Coco's Bakery! 🧁 Quiero realizar el siguiente pedido:`,
     ``,
@@ -517,7 +640,7 @@ function handleWhatsAppCheckout() {
     `💰 TOTAL ESTIMADO: ${totalText}${hasInquiry ? ' (con productos a cotizar)' : ''}`,
     ``,
     `👤 DATOS PARA LA ENTREGA:`,
-    `• Nombre: ${name}`,
+    name ? `• Nombre: ${name}` : `• Nombre: A coordinar`,
     `• Entrega: ${deliveryText}`,
     `• Forma de pago: ${paymentMethod}`,
     notes ? `• Aclaraciones: ${notes}` : null,
@@ -525,11 +648,31 @@ function handleWhatsAppCheckout() {
     `¡Muchas gracias! ✨ Espero tu confirmación.`
   ].filter(line => line !== null).join('\n');
 
-  // URL oficial de WhatsApp hacia +54 3442 472867 (5493442472867)
-  const waUrl = `https://wa.me/${BAKERY_PHONE}?text=${encodeURIComponent(message)}`;
+  return `https://wa.me/${BAKERY_PHONE}?text=${encodeURIComponent(message)}`;
+}
 
-  // Abrir WhatsApp en nueva pestaña
-  window.open(waUrl, '_blank', 'noopener,noreferrer');
+function handleWhatsAppCheckout(e) {
+  const cart = getCart();
+  if (cart.length === 0) {
+    if (e) e.preventDefault();
+    showToast('Tu canastita está vacía.');
+    return;
+  }
+
+  const waUrl = buildWhatsAppOrderUrl();
+  const checkoutBtn = document.querySelector('#btn-checkout-wa');
+
+  if (checkoutBtn && checkoutBtn.tagName === 'A') {
+    checkoutBtn.href = waUrl;
+  } else {
+    if (e) e.preventDefault();
+    const newWin = window.open(waUrl, '_blank');
+    if (newWin) {
+      newWin.opener = null;
+    } else {
+      window.location.href = waUrl;
+    }
+  }
 
   showToast('¡Redirigiendo a WhatsApp con tu pedido preparado! 📲');
 }
