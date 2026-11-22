@@ -4,9 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex,nofollow" />
+    <meta name="theme-color" content="#FFF9F5" />
     <title>Administración · Coco's Bakery</title>
-    <!-- Favicon temático SVG -->
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧁</text></svg>" />
+    <!-- Favicon e iconos oficiales de marca -->
+    <link rel="icon" href="favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" href="assets/brand/icon-192.png" sizes="192x192" />
+    <link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Nunito+Sans:wght@400;600;700;800&display=swap" rel="stylesheet" />
@@ -17,7 +20,7 @@
     <!-- PANTALLA DE INGRESO (LOGIN) -->
     <main class="admin-login-wrap" id="admin-login">
       <div class="admin-login-card">
-        <img class="admin-login-avatar" src="assets/cocos-bakery-mark.jpg" onerror="this.onerror=null;this.src='https://raw.githubusercontent.com/vslocaltech/cocos-bakery/main/assets/cocos-bakery-mark.jpg';" alt="Logo de Coco's Bakery" />
+        <img class="admin-login-avatar" src="assets/brand/isotipo-coco.jpg" alt="Isotipo oficial de Coco's Bakery" width="96" height="96" />
         <span class="eyebrow">Área Privada</span>
         <h1>Hola, Coco ♡</h1>
         <p style="color: var(--choco-soft); font-size: 15px; margin-bottom: 24px;">Ingresá tu clave mágica para editar la carta de delicias.</p>
@@ -25,12 +28,15 @@
         <form id="login-form">
           <div class="form-group">
             <label for="admin-key">Clave de acceso</label>
-            <input id="admin-key" class="form-control" type="password" autocomplete="current-password" placeholder="Tu contraseña..." required />
+            <div class="password-input-wrap">
+              <input id="admin-key" class="form-control" type="password" autocomplete="current-password" placeholder="Tu contraseña..." required />
+              <button type="button" class="password-toggle-btn" id="toggle-admin-key" aria-label="Mostrar u ocultar clave" title="Mostrar clave">👁</button>
+            </div>
           </div>
-          <button class="button button-pink" type="submit" style="width: 100%;">
+          <button class="button button-pink" id="login-submit-btn" type="submit" style="width: 100%;">
             Entrar al rincón dulce <span>✨</span>
           </button>
-          <p class="form-message" role="status"></p>
+          <p class="form-message" id="login-message" role="status"></p>
         </form>
 
         <div style="margin-top: 25px;">
@@ -43,11 +49,16 @@
     <main class="admin-panel hidden" id="admin-panel">
       <!-- Barra superior -->
       <header class="admin-navbar">
-        <a class="brand" href="index.html">
-          <span class="brand-mini">C</span>
-          <span>Coco's Bakery</span>
+        <a class="brand" href="index.html" aria-label="Coco's Bakery, inicio">
+          <span class="brand-mini">
+            <img src="assets/brand/isotipo-coco.jpg" alt="" width="44" height="44" />
+          </span>
+          <img class="brand-wordmark" src="assets/brand/logotipo-texto.png" alt="Coco's Bakery" height="36" />
         </a>
         <div class="admin-nav-actions">
+          <button class="button button-secondary" id="open-password-modal-btn" type="button" style="padding: 8px 16px; font-size: 13px;">
+            🔑 Clave
+          </button>
           <a href="catalogo.html" class="button button-secondary" style="padding: 8px 18px; font-size: 13px;">
             Ver catálogo <span>↗</span>
           </a>
@@ -92,15 +103,33 @@
               </div>
 
               <div class="form-group">
-                <label for="prod-tag">Etiqueta destacada (Opcional)</label>
-                <select id="prod-tag" name="tag" class="form-control">
-                  <option value="">Sin etiqueta</option>
-                  <option value="Más pedido">Más pedido 🔥</option>
-                  <option value="Favorito">Favorito ♥</option>
-                  <option value="Destacado">Destacado ✨</option>
-                  <option value="Personalizable">Personalizable 🎨</option>
-                  <option value="Edición limitada">Edición limitada 🎀</option>
-                </select>
+                <label for="prod-tag">Etiqueta / Tag destacada (Opcional)</label>
+                <input
+                  type="text"
+                  id="prod-tag"
+                  name="tag"
+                  class="form-control"
+                  list="prod-tag-suggestions"
+                  maxlength="28"
+                  placeholder="Escribí una etiqueta (ej. Edición limitada, Nuevo, Promo...)"
+                />
+                <datalist id="prod-tag-suggestions">
+                  <option value="Más pedido"></option>
+                  <option value="Favorito"></option>
+                  <option value="Especial"></option>
+                  <option value="Destacado"></option>
+                  <option value="Personalizable"></option>
+                  <option value="Edición limitada"></option>
+                  <option value="Nuevo"></option>
+                </datalist>
+                <div class="tag-quick-chips" id="tag-quick-chips" aria-label="Etiquetas rápidas">
+                  <button type="button" class="tag-chip" data-tag-chip="Más pedido">Más pedido</button>
+                  <button type="button" class="tag-chip" data-tag-chip="Especial">Especial</button>
+                  <button type="button" class="tag-chip" data-tag-chip="Edición limitada">Edición limitada</button>
+                  <button type="button" class="tag-chip" data-tag-chip="Personalizable">Personalizable</button>
+                  <button type="button" class="tag-chip" data-tag-chip="Nuevo">Nuevo</button>
+                  <button type="button" class="tag-chip tag-chip-clear" data-tag-chip="">Sin tag</button>
+                </div>
               </div>
 
               <div class="form-group">
@@ -114,10 +143,20 @@
               </div>
 
               <div class="form-group">
-                <label>Foto del producto</label>
+                <label class="admin-checkbox-card" for="prod-featured">
+                  <input type="checkbox" id="prod-featured" name="featured" />
+                  <span class="admin-checkbox-copy">
+                    <strong>Favorito en página principal ♥</strong>
+                    <small>Mostralo destacado en "Pequeños favoritos" del inicio.</small>
+                  </span>
+                </label>
+              </div>
+
+              <div class="form-group">
+                <label for="product-image-file">Foto del producto</label>
                 <div style="display: grid; gap: 8px;">
                   <input type="file" id="product-image-file" class="form-control" accept="image/*" style="font-size: 13px;" />
-                  <input type="url" id="product-image-url" class="form-control" placeholder="O pega un enlace de imagen (https://...)" />
+                  <input type="text" id="product-image-url" class="form-control" placeholder="O pegá un enlace de imagen (https://...)" />
                 </div>
                 <!-- Vista previa de imagen -->
                 <div class="image-preview-box">
@@ -125,10 +164,13 @@
                     ✨ Vista previa de la foto aquí
                   </span>
                   <img id="preview-image" class="hidden" alt="Vista previa del dulce" />
+                  <button type="button" id="clear-image-btn" class="btn-clear-image hidden" title="Quitar foto seleccionada">✕ Quitar</button>
                 </div>
               </div>
 
-              <div style="display: grid; gap: 10px; margin-top: 25px;">
+              <p id="product-form-message" class="form-message" role="status"></p>
+
+              <div style="display: grid; gap: 10px; margin-top: 18px;">
                 <button id="submit-btn" class="button button-pink" type="submit" style="width: 100%;">
                   Guardar en la carta <span>+</span>
                 </button>
@@ -162,6 +204,36 @@
         </div>
       </div>
     </main>
+
+    <!-- MODAL PARA CAMBIAR CONTRASEÑA -->
+    <div id="password-modal-overlay" class="modal-overlay" aria-hidden="true">
+      <div class="password-modal" role="dialog" aria-modal="true" aria-labelledby="password-modal-title">
+        <button type="button" class="modal-close-btn" id="close-password-modal-btn" aria-label="Cerrar ventana">✕</button>
+        <span class="eyebrow">Seguridad</span>
+        <h2 id="password-modal-title" style="font-size: 28px; margin-bottom: 6px;">Cambiar clave de acceso</h2>
+        <p class="subtitle" style="margin-bottom: 20px;">Elegí una contraseña privada de al menos 6 caracteres.</p>
+
+        <form id="change-password-form">
+          <div class="form-group">
+            <label for="current-admin-key">Clave actual</label>
+            <input id="current-admin-key" class="form-control" type="password" autocomplete="current-password" required />
+          </div>
+          <div class="form-group">
+            <label for="new-admin-key">Nueva clave</label>
+            <input id="new-admin-key" class="form-control" type="password" autocomplete="new-password" minlength="6" placeholder="Mínimo 6 caracteres" required />
+          </div>
+          <div class="form-group">
+            <label for="confirm-admin-key">Confirmar nueva clave</label>
+            <input id="confirm-admin-key" class="form-control" type="password" autocomplete="new-password" minlength="6" placeholder="Repetí tu nueva clave" required />
+          </div>
+          <p id="password-change-message" class="form-message" role="status"></p>
+          <div style="display: grid; gap: 10px; margin-top: 16px;">
+            <button type="submit" class="button button-pink" style="width: 100%;">Guardar nueva clave <span>🔒</span></button>
+            <button type="button" class="button button-secondary" id="cancel-password-modal-btn" style="width: 100%;">Cancelar</button>
+          </div>
+        </form>
+      </div>
+    </div>
 
     <script src="script.js"></script>
   </body>

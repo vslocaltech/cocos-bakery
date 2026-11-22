@@ -23,7 +23,8 @@ const DEFAULT_PRODUCTS = [
     tag: "Favorito",
     price: "$3.200",
     description: "Galletas de mantequilla con glaseado de vainilla, polvo de frutilla y detalles de oro comestible.",
-    image: "https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=700&q=80"
+    image: "https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=700&q=80",
+    featured: true
   },
   {
     name: "Cake de Ensueño Vintage",
@@ -31,7 +32,8 @@ const DEFAULT_PRODUCTS = [
     tag: "Más pedido",
     price: "$18.500",
     description: "Bizcochuelo de vainilla bourbon relleno de crema chantilly, frutos del bosque y decoración vintage con moños.",
-    image: "https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=700&q=80"
+    image: "https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=700&q=80",
+    featured: true
   },
   {
     name: "Bocados de Cacao Real & Menta",
@@ -39,7 +41,8 @@ const DEFAULT_PRODUCTS = [
     tag: "Especial",
     price: "$4.100",
     description: "Brownies de chocolate belga intenso 70% con corazón cremoso y suave frosting de menta pastel.",
-    image: "https://images.unsplash.com/photo-1606313564200-e75d5e30476c?auto=format&fit=crop&w=700&q=80"
+    image: "https://images.unsplash.com/photo-1606313564200-e75d5e30476c?auto=format&fit=crop&w=700&q=80",
+    featured: true
   },
   {
     name: "Cupcakes de la Hora del Té",
@@ -47,7 +50,8 @@ const DEFAULT_PRODUCTS = [
     tag: "Destacado",
     price: "$4.800",
     description: "Esponjosos cupcakes con remolino de crema de fresa, perlas de azúcar y moño rosa artesanal.",
-    image: "https://images.unsplash.com/photo-1587668178277-295251f900ce?auto=format&fit=crop&w=700&q=80"
+    image: "https://images.unsplash.com/photo-1587668178277-295251f900ce?auto=format&fit=crop&w=700&q=80",
+    featured: false
   },
   {
     name: "Macarons de Pétalos de Rosa",
@@ -55,7 +59,8 @@ const DEFAULT_PRODUCTS = [
     tag: "Edición limitada",
     price: "$5.400",
     description: "Caja de macarons franceses rellenos de ganache de chocolate blanco, agua de rosas y frambuesa.",
-    image: "https://images.unsplash.com/photo-1569864358642-9d1684040f43?auto=format&fit=crop&w=700&q=80"
+    image: "https://images.unsplash.com/photo-1569864358642-9d1684040f43?auto=format&fit=crop&w=700&q=80",
+    featured: false
   },
   {
     name: "Tarta Vintage de Frutos Dulces",
@@ -63,29 +68,183 @@ const DEFAULT_PRODUCTS = [
     tag: "Personalizable",
     price: "$16.900",
     description: "Masa sablée crocante, crema diplomata perfumada con limón y lluvia de fresas frescas con glaseado brillante.",
-    image: "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=700&q=80"
+    image: "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=700&q=80",
+    featured: false
   }
 ];
 
 // ============================================================================
-// PRODUCTOS: OBTENER Y GUARDAR (localStorage)
+// PRODUCTOS: OBTENER Y GUARDAR (Cloudflare Pages KV API + caché localStorage)
 // ============================================================================
+const PRODUCTS_STORAGE_KEY = 'cocosProducts';
+const FALLBACK_PRODUCT_IMAGE = 'https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=700&q=80';
+
+let productsMemoryCache = null;
+let cloudflareApiMode = null; // null = detectando, true = Cloudflare Pages API, false = solo local
+const productsChangeListeners = new Set();
+
+function isLocalOfflineOrigin() {
+  try {
+    const proto = window.location.protocol;
+    const host = window.location.hostname;
+    return proto === 'file:' || host === 'localhost' || host === '127.0.0.1';
+  } catch (e) {
+    return false;
+  }
+}
+
+function subscribeProductsChange(listener) {
+  if (typeof listener === 'function') {
+    productsChangeListeners.add(listener);
+  }
+}
+
+function notifyProductsChanged() {
+  productsChangeListeners.forEach((fn) => {
+    try {
+      fn();
+    } catch (e) {
+      // Ignorar errores de suscriptores
+    }
+  });
+}
+
+function cloneDefaultProducts() {
+  return DEFAULT_PRODUCTS.map(prod => ({ ...prod }));
+}
+
+function mirrorProductsToLocalStorage(products) {
+  try {
+    localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(products));
+  } catch (e) {
+    // Si localStorage está lleno en modo Cloudflare, no bloquear la app porque KV es la fuente de verdad
+  }
+}
+
 function getProducts() {
-  const stored = localStorage.getItem('cocosProducts');
-  if (!stored) {
-    localStorage.setItem('cocosProducts', JSON.stringify(DEFAULT_PRODUCTS));
-    return DEFAULT_PRODUCTS;
+  if (Array.isArray(productsMemoryCache)) {
+    return productsMemoryCache.map(prod => ({ ...prod }));
   }
   try {
+    const stored = localStorage.getItem(PRODUCTS_STORAGE_KEY);
+    if (stored === null) {
+      const defaults = cloneDefaultProducts();
+      mirrorProductsToLocalStorage(defaults);
+      return defaults;
+    }
     const parsed = JSON.parse(stored);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_PRODUCTS;
+    if (Array.isArray(parsed)) {
+      return parsed.filter(p => p && typeof p === 'object' && typeof p.name === 'string');
+    }
+    return cloneDefaultProducts();
   } catch (e) {
-    return DEFAULT_PRODUCTS;
+    return cloneDefaultProducts();
   }
 }
 
 function saveProducts(products) {
-  localStorage.setItem('cocosProducts', JSON.stringify(products));
+  productsMemoryCache = products.map(prod => ({ ...prod }));
+  try {
+    localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(products));
+    return { ok: true };
+  } catch (err) {
+    const isQuota =
+      err &&
+      (err.name === 'QuotaExceededError' ||
+        err.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+        err.code === 22 ||
+        err.code === 1014);
+    return {
+      ok: false,
+      quotaExceeded: Boolean(isQuota),
+      error: isQuota
+        ? 'El espacio de guardado del navegador está lleno. Probá con una foto más liviana o un enlace (URL).'
+        : 'No se pudo guardar en este navegador (verificá que no esté en modo privado o bloqueando almacenamiento).'
+    };
+  }
+}
+
+async function fetchProductsFromServer() {
+  if (window.location.protocol === 'file:') {
+    cloudflareApiMode = false;
+    return getProducts();
+  }
+  try {
+    const res = await fetch('/api/products', {
+      method: 'GET',
+      cache: 'no-store',
+      credentials: 'same-origin'
+    });
+    const contentType = res.headers.get('content-type') || '';
+    if (!res.ok || !contentType.includes('application/json')) {
+      if (isLocalOfflineOrigin()) {
+        cloudflareApiMode = false;
+      }
+      return getProducts();
+    }
+    const data = await res.json();
+    if (data && data.ok && Array.isArray(data.products)) {
+      cloudflareApiMode = true;
+      productsMemoryCache = data.products.map(prod => ({ ...prod }));
+      mirrorProductsToLocalStorage(productsMemoryCache);
+      notifyProductsChanged();
+      return getProducts();
+    }
+  } catch (err) {
+    if (isLocalOfflineOrigin()) {
+      cloudflareApiMode = false;
+    }
+  }
+  return getProducts();
+}
+
+async function saveProductsAsync(products) {
+  const shouldUseRemote = cloudflareApiMode === true || !isLocalOfflineOrigin();
+  if (shouldUseRemote) {
+    try {
+      const res = await fetch('/api/products', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ products })
+      });
+      const contentType = res.headers.get('content-type') || '';
+      const data = contentType.includes('application/json') ? await res.json() : null;
+
+      if (res.status === 401) {
+        return {
+          ok: false,
+          unauthorized: true,
+          error: data?.error || 'Tu sesión expiró. Volvé a iniciar sesión.'
+        };
+      }
+
+      if (!res.ok || !data?.ok) {
+        return {
+          ok: false,
+          error: data?.error || 'No se pudieron guardar los cambios en el servidor.'
+        };
+      }
+
+      cloudflareApiMode = true;
+      productsMemoryCache = (data.products || products).map(prod => ({ ...prod }));
+      mirrorProductsToLocalStorage(productsMemoryCache);
+      notifyProductsChanged();
+      return { ok: true, products: getProducts() };
+    } catch (err) {
+      return {
+        ok: false,
+        error: 'Error de conexión al guardar los cambios. Revisá tu internet e intentá de nuevo.'
+      };
+    }
+  }
+
+  // Modo local (sin backend Cloudflare Functions)
+  const localRes = saveProducts(products);
+  if (localRes.ok) {
+    notifyProductsChanged();
+  }
+  return localRes;
 }
 
 // Utilidades de precio
@@ -399,7 +558,7 @@ function renderCartDrawer() {
   if (cart.length === 0) {
     cartBody.innerHTML = `
       <div class="cart-empty-state">
-        <span class="empty-icon">🧁</span>
+        <img class="cart-empty-logo" src="assets/brand/isotipo-coco.jpg" alt="Coco's Bakery" width="92" height="92" />
         <h4>Tu canastita está vacía</h4>
         <p>Aún no agregaste ninguna delicia. ¡Explorá nuestra carta y elegí tus dulces favoritos!</p>
         <a href="catalogo.html" class="button button-pink" id="cart-empty-catalogue-btn">
@@ -705,6 +864,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initCataloguePage();
   initIndexPage();
   initAdminPage();
+  fetchProductsFromServer();
 });
 
 // ============================================================================
@@ -886,6 +1046,15 @@ function initCataloguePage() {
   });
 
   render(currentFilter);
+  subscribeProductsChange(() => render(currentFilter));
+
+  // Sincronizar automáticamente si se agregan o editan dulces desde otra pestaña (admin.html)
+  window.addEventListener('storage', (e) => {
+    if (e.key === PRODUCTS_STORAGE_KEY) {
+      productsMemoryCache = null;
+      render(currentFilter);
+    }
+  });
 }
 
 // ============================================================================
@@ -895,40 +1064,264 @@ function initIndexPage() {
   const treatGrid = document.querySelector('#featured-grid');
   if (!treatGrid) return;
 
-  const products = getProducts().slice(0, 3);
-  treatGrid.innerHTML = products.map((prod, idx) => `
-    <article class="product-card">
-      <div class="product-media" title="Clic para ver detalles">
-        <span class="badge-kind">${escapeHtml(prod.category || 'Favorito')}</span>
-        ${prod.tag ? `<span class="badge-tag">${escapeHtml(prod.tag)}</span>` : ''}
-        <img src="${escapeHtml(prod.image || 'https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=600&q=80')}" 
-             alt="${escapeHtml(prod.name)}" 
-             loading="lazy" />
-      </div>
-      <div class="product-info">
-        <h3 class="product-title" style="cursor: pointer;" title="Clic para ver detalles">${escapeHtml(prod.name)}</h3>
-        <p class="product-desc">${escapeHtml(prod.description)}</p>
-        <div class="product-footer">
-          <span class="product-price">${escapeHtml(prod.price || 'Consultar')}</span>
-          <div class="product-card-actions">
-            <button type="button" class="btn-card-add" data-add-featured="${idx}" title="Agregar a la canasta">
-              Agregar <span>🛍️</span>
-            </button>
+  function renderFeatured() {
+    const allProducts = getProducts();
+    const markedFavorites = allProducts.filter(prod => Boolean(prod.featured));
+    const products = markedFavorites.length > 0 ? markedFavorites : allProducts.slice(0, 3);
+    treatGrid.innerHTML = products.map((prod, idx) => `
+      <article class="product-card">
+        <div class="product-media" title="Clic para ver detalles">
+          <span class="badge-kind">${escapeHtml(prod.category || 'Favorito')}</span>
+          ${prod.tag ? `<span class="badge-tag">${escapeHtml(prod.tag)}</span>` : ''}
+          <img src="${escapeHtml(prod.image || FALLBACK_PRODUCT_IMAGE)}" 
+               alt="${escapeHtml(prod.name)}" 
+               loading="lazy" 
+               onerror="this.src='${FALLBACK_PRODUCT_IMAGE}'" />
+        </div>
+        <div class="product-info">
+          <h3 class="product-title" style="cursor: pointer;" title="Clic para ver detalles">${escapeHtml(prod.name)}</h3>
+          <p class="product-desc">${escapeHtml(prod.description)}</p>
+          <div class="product-footer">
+            <span class="product-price">${escapeHtml(prod.price || 'Consultar')}</span>
+            <div class="product-card-actions">
+              <button type="button" class="btn-card-add" data-add-featured="${idx}" title="Agregar a la canasta">
+                Agregar <span>🛍️</span>
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-    </article>
-  `).join('');
+      </article>
+    `).join('');
 
-  treatGrid.querySelectorAll('.product-card').forEach((card, i) => {
-    const prod = products[i];
-    card.querySelector('.product-media')?.addEventListener('click', () => openProductModal(prod));
-    card.querySelector('.product-title')?.addEventListener('click', () => openProductModal(prod));
-    card.querySelector('[data-add-featured]')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      addToCart(prod, 1);
+    treatGrid.querySelectorAll('.product-card').forEach((card, i) => {
+      const prod = products[i];
+      card.querySelector('.product-media')?.addEventListener('click', () => openProductModal(prod));
+      card.querySelector('.product-title')?.addEventListener('click', () => openProductModal(prod));
+      card.querySelector('[data-add-featured]')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        addToCart(prod, 1);
+      });
     });
+  }
+
+  renderFeatured();
+  subscribeProductsChange(renderFeatured);
+
+  window.addEventListener('storage', (e) => {
+    if (e.key === PRODUCTS_STORAGE_KEY) {
+      productsMemoryCache = null;
+      renderFeatured();
+    }
   });
+}
+
+// ============================================================================
+// SEGURIDAD DE ACCESO ADMIN (SHA-256 sin dependencias externas)
+// ============================================================================
+const ADMIN_AUTH_SALT = 'cocos-bakery-v2:';
+const ADMIN_HASH_STORAGE_KEY = 'cocosAdminKeyHash';
+const DEFAULT_ADMIN_KEY_HASH = '5711e7c99236be7451664e19cd6649ace32a57a4d3e378f65b73d40ecb76597f';
+const ADMIN_ATTEMPTS_KEY = 'cocosAdminLoginAttempts';
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOGIN_LOCKOUT_MS = 30000;
+
+function sha256Hex(ascii) {
+  const rightRotate = (value, amount) => (value >>> amount) | (value << (32 - amount));
+  const mathPow = Math.pow;
+  const maxWord = mathPow(2, 32);
+  let result = '';
+  const words = [];
+  const utf8 = unescape(encodeURIComponent(ascii));
+  const asciiBitLength = utf8.length * 8;
+
+  const hash = [];
+  const k = [];
+  let primeCounter = 0;
+  const isComposite = {};
+
+  for (let candidate = 2; primeCounter < 64; candidate++) {
+    if (!isComposite[candidate]) {
+      for (let i = 0; i < 313; i += candidate) {
+        isComposite[i] = candidate;
+      }
+      hash[primeCounter] = (mathPow(candidate, 0.5) * maxWord) | 0;
+      k[primeCounter++] = (mathPow(candidate, 1 / 3) * maxWord) | 0;
+    }
+  }
+
+  const padded = utf8 + '\x80';
+  let msg = padded;
+  while ((msg.length % 64) - 56) msg += '\x00';
+  for (let i = 0; i < msg.length; i++) {
+    const j = msg.charCodeAt(i);
+    words[i >> 2] |= j << (((3 - i) % 4) * 8);
+  }
+  words[words.length] = (asciiBitLength / maxWord) | 0;
+  words[words.length] = asciiBitLength;
+
+  for (let j = 0; j < words.length; ) {
+    const w = words.slice(j, (j += 16));
+    const oldHash = hash.slice(0, 8);
+
+    for (let i = 0; i < 64; i++) {
+      const w15 = w[i - 15];
+      const w2 = w[i - 2];
+      const a = hash[0];
+      const e = hash[4];
+      const temp1 =
+        hash[7] +
+        (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25)) +
+        ((e & hash[5]) ^ (~e & hash[6])) +
+        k[i] +
+        (w[i] =
+          i < 16
+            ? w[i]
+            : (w[i - 16] +
+                (rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3)) +
+                w[i - 7] +
+                (rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10))) |
+              0);
+      const temp2 =
+        (rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22)) +
+        ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]));
+
+      hash.unshift((temp1 + temp2) | 0);
+      hash[4] = (hash[4] + temp1) | 0;
+      hash.length = 8;
+    }
+
+    for (let i = 0; i < 8; i++) {
+      hash[i] = (hash[i] + oldHash[i]) | 0;
+    }
+  }
+
+  for (let i = 0; i < 8; i++) {
+    for (let j = 3; j + 1; j--) {
+      const b = (hash[i] >> (j * 8)) & 255;
+      result += (b < 16 ? '0' : '') + b.toString(16);
+    }
+  }
+  return result;
+}
+
+function hashAdminKey(plainKey) {
+  return sha256Hex(ADMIN_AUTH_SALT + String(plainKey || ''));
+}
+
+function getStoredAdminHash() {
+  try {
+    return localStorage.getItem(ADMIN_HASH_STORAGE_KEY) || DEFAULT_ADMIN_KEY_HASH;
+  } catch (e) {
+    return DEFAULT_ADMIN_KEY_HASH;
+  }
+}
+
+function verifyAdminKey(plainKey) {
+  return hashAdminKey(plainKey) === getStoredAdminHash();
+}
+
+function getLoginAttemptState() {
+  try {
+    const raw = sessionStorage.getItem(ADMIN_ATTEMPTS_KEY);
+    if (!raw) return { count: 0, lockedUntil: 0 };
+    const parsed = JSON.parse(raw);
+    return {
+      count: Number(parsed.count) || 0,
+      lockedUntil: Number(parsed.lockedUntil) || 0
+    };
+  } catch (e) {
+    return { count: 0, lockedUntil: 0 };
+  }
+}
+
+function saveLoginAttemptState(state) {
+  try {
+    sessionStorage.setItem(ADMIN_ATTEMPTS_KEY, JSON.stringify(state));
+  } catch (e) {
+    // Ignorar errores de sessionStorage
+  }
+}
+
+// ============================================================================
+// COMPRESIÓN DE IMÁGENES PARA LOCALSTORAGE
+// ============================================================================
+function compressImageDataUrl(dataUrl, maxDimension = 900, quality = 0.78) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        let { width, height } = img;
+        if (width > maxDimension || height > maxDimension) {
+          if (width >= height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, width);
+        canvas.height = Math.max(1, height);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(dataUrl);
+          return;
+        }
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      } catch (err) {
+        reject(err);
+      }
+    };
+    img.onerror = () => reject(new Error('No se pudo leer la imagen seleccionada.'));
+    img.src = dataUrl;
+  });
+}
+
+function readAndCompressImageFile(file, maxDimension = 900, quality = 0.78) {
+  return new Promise((resolve, reject) => {
+    if (!file || !file.type.startsWith('image/')) {
+      reject(new Error('El archivo seleccionado no es una imagen válida.'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('No se pudo cargar el archivo de imagen.'));
+    reader.onload = async (event) => {
+      const rawDataUrl = event.target?.result;
+      if (typeof rawDataUrl !== 'string') {
+        reject(new Error('Error al leer la imagen.'));
+        return;
+      }
+      try {
+        const compressed = await compressImageDataUrl(rawDataUrl, maxDimension, quality);
+        resolve(compressed);
+      } catch (err) {
+        resolve(rawDataUrl);
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function normalizeImageInput(raw) {
+  const value = String(raw || '').trim();
+  if (!value) return '';
+  if (/^www\./i.test(value)) return 'https://' + value;
+  return value;
+}
+
+function normalizePriceInput(raw) {
+  const value = String(raw || '').trim();
+  if (!value) return 'Consultar';
+  // Si ingresaron solo números (ej: 4500), formatear como $4.500
+  if (/^\d+$/.test(value)) {
+    const num = parseInt(value, 10);
+    return num > 0 ? '$' + num.toLocaleString('es-AR') : 'Consultar';
+  }
+  return value;
 }
 
 // ============================================================================
@@ -938,99 +1331,424 @@ function initAdminPage() {
   const loginForm = document.querySelector('#login-form');
   const loginScreen = document.querySelector('#admin-login');
   const adminPanel = document.querySelector('#admin-panel');
-  const message = document.querySelector('.form-message');
+  const message = document.querySelector('#login-message') || document.querySelector('.form-message');
   const logoutBtn = document.querySelector('#logout');
+  const keyInput = document.querySelector('#admin-key');
+  const toggleKeyBtn = document.querySelector('#toggle-admin-key');
 
   if (!loginScreen || !adminPanel) return;
+
+  let crudController = null;
+  let passwordModalInitialized = false;
+  let useServerAuth = !isLocalOfflineOrigin();
+
+  function forceShowLogin(statusText = '') {
+    sessionStorage.removeItem('cocosAdmin');
+    adminPanel.classList.add('hidden');
+    loginScreen.classList.remove('hidden');
+    if (keyInput) {
+      keyInput.value = '';
+      keyInput.type = 'password';
+    }
+    if (toggleKeyBtn) toggleKeyBtn.textContent = '👁';
+    if (message) message.textContent = statusText;
+  }
+
+  toggleKeyBtn?.addEventListener('click', () => {
+    if (!keyInput) return;
+    const isHidden = keyInput.type === 'password';
+    keyInput.type = isHidden ? 'text' : 'password';
+    toggleKeyBtn.textContent = isHidden ? '🙈' : '👁';
+    toggleKeyBtn.title = isHidden ? 'Ocultar clave' : 'Mostrar clave';
+  });
+
+  function setupPasswordModal() {
+    if (passwordModalInitialized) return;
+    passwordModalInitialized = true;
+
+    const openBtn = document.querySelector('#open-password-modal-btn');
+    const overlay = document.querySelector('#password-modal-overlay');
+    const closeBtn = document.querySelector('#close-password-modal-btn');
+    const cancelBtn = document.querySelector('#cancel-password-modal-btn');
+    const form = document.querySelector('#change-password-form');
+    const statusMsg = document.querySelector('#password-change-message');
+
+    if (!openBtn || !overlay || !form) return;
+
+    function openModal() {
+      form.reset();
+      if (statusMsg) {
+        statusMsg.textContent = '';
+        statusMsg.classList.remove('success');
+      }
+      overlay.classList.add('active');
+      overlay.setAttribute('aria-hidden', 'false');
+      document.querySelector('#current-admin-key')?.focus();
+    }
+
+    function closeModal() {
+      overlay.classList.remove('active');
+      overlay.setAttribute('aria-hidden', 'true');
+    }
+
+    openBtn.addEventListener('click', openModal);
+    closeBtn?.addEventListener('click', closeModal);
+    cancelBtn?.addEventListener('click', closeModal);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeModal();
+    });
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && overlay.classList.contains('active')) {
+        closeModal();
+      }
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const currentKey = document.querySelector('#current-admin-key')?.value.trim() || '';
+      const newKey = document.querySelector('#new-admin-key')?.value.trim() || '';
+      const confirmKey = document.querySelector('#confirm-admin-key')?.value.trim() || '';
+
+      if (statusMsg) statusMsg.classList.remove('success');
+
+      if (newKey.length < 6) {
+        if (statusMsg) statusMsg.textContent = 'La nueva clave debe tener al menos 6 caracteres.';
+        return;
+      }
+
+      if (newKey !== confirmKey) {
+        if (statusMsg) statusMsg.textContent = 'Las nuevas claves no coinciden.';
+        return;
+      }
+
+      if (useServerAuth) {
+        const submitButton = form.querySelector('button[type="submit"]');
+        if (submitButton) submitButton.disabled = true;
+        try {
+          const res = await fetch('/api/auth/password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ currentPassword: currentKey, newPassword: newKey })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.status === 401) {
+            closeModal();
+            forceShowLogin(data.error || 'Tu sesión expiró. Volvé a iniciar sesión.');
+            return;
+          }
+          if (!res.ok || !data.ok) {
+            if (statusMsg) statusMsg.textContent = data.error || 'No se pudo actualizar la clave.';
+            return;
+          }
+          if (statusMsg) {
+            statusMsg.textContent = '¡Clave actualizada globalmente con éxito!';
+            statusMsg.classList.add('success');
+          }
+          showToast('Clave de acceso actualizada 🔒');
+          setTimeout(closeModal, 700);
+        } catch (err) {
+          if (statusMsg) statusMsg.textContent = 'Error de conexión al guardar la nueva clave.';
+        } finally {
+          if (submitButton) submitButton.disabled = false;
+        }
+        return;
+      }
+
+      if (!verifyAdminKey(currentKey)) {
+        if (statusMsg) statusMsg.textContent = 'La clave actual es incorrecta.';
+        return;
+      }
+
+      try {
+        localStorage.setItem(ADMIN_HASH_STORAGE_KEY, hashAdminKey(newKey));
+        if (statusMsg) {
+          statusMsg.textContent = '¡Clave actualizada con éxito!';
+          statusMsg.classList.add('success');
+        }
+        showToast('Clave de acceso actualizada 🔒');
+        setTimeout(closeModal, 700);
+      } catch (err) {
+        if (statusMsg) statusMsg.textContent = 'No se pudo guardar la nueva clave en este navegador.';
+      }
+    });
+  }
 
   function showAdmin() {
     loginScreen.classList.add('hidden');
     adminPanel.classList.remove('hidden');
-    setupAdminCRUD();
+    if (!crudController) {
+      crudController = setupAdminCRUD({ onUnauthorized: () => forceShowLogin('Tu sesión expiró. Volvé a ingresar.') });
+    } else {
+      crudController.refresh();
+    }
+    setupPasswordModal();
+    fetchProductsFromServer();
   }
 
-  // Comprobar si ya inició sesión
-  if (sessionStorage.getItem('cocosAdmin') === 'true') {
-    showAdmin();
-  }
+  // Detectar modo Cloudflare Pages Auth o modo local
+  (async function checkInitialSession() {
+    if (window.location.protocol !== 'file:') {
+      try {
+        const res = await fetch('/api/auth/session', {
+          method: 'GET',
+          cache: 'no-store',
+          credentials: 'same-origin'
+        });
+        const contentType = res.headers.get('content-type') || '';
+        if (res.ok && contentType.includes('application/json')) {
+          const data = await res.json();
+          if (data && data.mode === 'cloudflare') {
+            useServerAuth = true;
+            cloudflareApiMode = true;
+            if (data.authenticated) {
+              showAdmin();
+            }
+            return;
+          }
+        }
+      } catch (err) {
+        // Si estamos en entorno local sin Functions, continuar al fallback local
+      }
+    }
 
-  // Manejo de Login (Clave predeterminada: 'coco')
-  loginForm?.addEventListener('submit', (e) => {
+    if (isLocalOfflineOrigin()) {
+      useServerAuth = false;
+      if (sessionStorage.getItem('cocosAdmin') === 'true') {
+        showAdmin();
+      }
+    }
+  })();
+
+  // Manejo de Login (server-side en Cloudflare Pages; fallback local solo en localhost/file:)
+  loginForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const key = document.querySelector('#admin-key')?.value.trim();
-    if (key === 'coco') {
+    const key = keyInput?.value.trim() || '';
+    const loginSubmitBtn = document.querySelector('#login-submit-btn');
+
+    if (useServerAuth) {
+      if (loginSubmitBtn) loginSubmitBtn.disabled = true;
+      if (message) message.textContent = '';
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ password: key })
+        });
+        const contentType = res.headers.get('content-type') || '';
+        const data = contentType.includes('application/json') ? await res.json() : null;
+
+        if (res.ok && data?.ok) {
+          cloudflareApiMode = true;
+          if (message) message.textContent = '';
+          if (keyInput) {
+            keyInput.value = '';
+            keyInput.type = 'password';
+          }
+          if (toggleKeyBtn) toggleKeyBtn.textContent = '👁';
+          showAdmin();
+          showToast('¡Bienvenida, Coco! ✨');
+        } else {
+          if (message) {
+            message.textContent = data?.error || 'Clave incorrecta. Intentá nuevamente.';
+          }
+          if (keyInput) keyInput.select();
+        }
+      } catch (err) {
+        if (message) message.textContent = 'No se pudo conectar con el servidor. Intentá nuevamente.';
+      } finally {
+        if (loginSubmitBtn) loginSubmitBtn.disabled = false;
+      }
+      return;
+    }
+
+    const now = Date.now();
+    const attempts = getLoginAttemptState();
+
+    if (attempts.lockedUntil > now) {
+      const remaining = Math.ceil((attempts.lockedUntil - now) / 1000);
+      if (message) {
+        message.textContent = `Demasiados intentos fallidos. Esperá ${remaining}s para volver a intentar.`;
+      }
+      return;
+    }
+
+    if (verifyAdminKey(key)) {
+      saveLoginAttemptState({ count: 0, lockedUntil: 0 });
       sessionStorage.setItem('cocosAdmin', 'true');
+      if (message) message.textContent = '';
+      if (keyInput) {
+        keyInput.value = '';
+        keyInput.type = 'password';
+      }
+      if (toggleKeyBtn) toggleKeyBtn.textContent = '👁';
       showAdmin();
       showToast('¡Bienvenida, Coco! ✨');
     } else {
-      if (message) message.textContent = 'La clave no coincide. Probá con "coco".';
+      const nextCount = attempts.count + 1;
+      if (nextCount >= MAX_LOGIN_ATTEMPTS) {
+        saveLoginAttemptState({ count: 0, lockedUntil: now + LOGIN_LOCKOUT_MS });
+        if (message) {
+          message.textContent = 'Demasiados intentos fallidos. Esperá 30 segundos antes de reintentar.';
+        }
+      } else {
+        saveLoginAttemptState({ count: nextCount, lockedUntil: 0 });
+        if (message) {
+          message.textContent = 'Clave incorrecta. Intentá nuevamente.';
+        }
+      }
+      if (keyInput) {
+        keyInput.select();
+      }
     }
   });
 
-  logoutBtn?.addEventListener('click', () => {
-    sessionStorage.removeItem('cocosAdmin');
-    adminPanel.classList.add('hidden');
-    loginScreen.classList.remove('hidden');
-    const keyInput = document.querySelector('#admin-key');
-    if (keyInput) keyInput.value = '';
-    if (message) message.textContent = '';
+  logoutBtn?.addEventListener('click', async () => {
+    if (useServerAuth) {
+      try {
+        await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+      } catch (err) {
+        // Ignorar error de red al cerrar sesión
+      }
+    }
+    forceShowLogin('');
   });
 }
 
 // ============================================================================
 // CRUD COMPLETO DEL PANEL DE ADMINISTRACIÓN
 // ============================================================================
-function setupAdminCRUD() {
+function setupAdminCRUD(options = {}) {
+  const { onUnauthorized } = options;
   const productForm = document.querySelector('#product-form');
   const productList = document.querySelector('#admin-product-list');
   const formTitle = document.querySelector('#form-title');
   const submitBtn = document.querySelector('#submit-btn');
   const cancelBtn = document.querySelector('#cancel-btn');
   const editIndexInput = document.querySelector('#edit-index');
+  const formMessage = document.querySelector('#product-form-message');
 
   const fileInput = document.querySelector('#product-image-file');
   const urlInput = document.querySelector('#product-image-url');
   const previewImg = document.querySelector('#preview-image');
   const previewPlaceholder = document.querySelector('#preview-placeholder');
+  const clearImageBtn = document.querySelector('#clear-image-btn');
 
   const searchInput = document.querySelector('#admin-search-input');
   const countBadge = document.querySelector('#admin-product-count');
   const resetBtn = document.querySelector('#admin-reset-btn');
+  const tagInput = document.querySelector('#prod-tag');
+  const tagChips = document.querySelectorAll('[data-tag-chip]');
 
   let currentImageData = '';
+  let imageProcessingPromise = null;
+
+  function syncTagChipStates() {
+    const currentVal = (tagInput?.value || '').trim().toLowerCase();
+    tagChips.forEach(chip => {
+      const chipVal = (chip.dataset.tagChip || '').trim().toLowerCase();
+      chip.classList.toggle('active', Boolean(chipVal) && chipVal === currentVal);
+    });
+  }
+
+  tagChips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      if (!tagInput) return;
+      tagInput.value = chip.dataset.tagChip || '';
+      syncTagChipStates();
+      tagInput.focus();
+    });
+  });
+
+  tagInput?.addEventListener('input', syncTagChipStates);
+
+  function setFormFeedback(text, isSuccess = false) {
+    if (!formMessage) return;
+    formMessage.textContent = text || '';
+    formMessage.classList.toggle('success', Boolean(isSuccess));
+  }
 
   function updateImagePreview(src) {
-    if (src && src.trim()) {
-      previewImg.src = src;
+    const cleanSrc = normalizeImageInput(src);
+    if (cleanSrc) {
+      previewImg.src = cleanSrc;
       previewImg.classList.remove('hidden');
       previewPlaceholder?.classList.add('hidden');
-      currentImageData = src;
+      clearImageBtn?.classList.remove('hidden');
+      currentImageData = cleanSrc;
     } else {
-      previewImg.src = '';
+      previewImg.removeAttribute('src');
       previewImg.classList.add('hidden');
       previewPlaceholder?.classList.remove('hidden');
+      if (previewPlaceholder) {
+        previewPlaceholder.textContent = '✨ Vista previa de la foto aquí';
+      }
+      clearImageBtn?.classList.add('hidden');
       currentImageData = '';
     }
   }
 
-  fileInput?.addEventListener('change', (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const base64 = event.target?.result;
-        updateImagePreview(base64);
-        if (urlInput) urlInput.value = '';
-      };
-      reader.readAsDataURL(file);
+  previewImg?.addEventListener('error', () => {
+    if (currentImageData && !currentImageData.startsWith('data:')) {
+      setFormFeedback('No se pudo previsualizar ese enlace de imagen. Verificá que sea una URL directa a una foto.');
     }
   });
 
+  previewImg?.addEventListener('load', () => {
+    if (formMessage && !formMessage.classList.contains('success')) {
+      setFormFeedback('');
+    }
+  });
+
+  clearImageBtn?.addEventListener('click', () => {
+    if (fileInput) fileInput.value = '';
+    if (urlInput) urlInput.value = '';
+    imageProcessingPromise = null;
+    updateImagePreview('');
+    setFormFeedback('');
+  });
+
+  fileInput?.addEventListener('change', (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setFormFeedback('');
+    if (urlInput) urlInput.value = '';
+    if (previewPlaceholder) {
+      previewPlaceholder.textContent = '⏳ Optimizando foto...';
+      previewPlaceholder.classList.remove('hidden');
+    }
+    previewImg?.classList.add('hidden');
+
+    const processing = readAndCompressImageFile(file, 900, 0.78)
+      .then((compressedDataUrl) => {
+        updateImagePreview(compressedDataUrl);
+        return compressedDataUrl;
+      })
+      .catch((err) => {
+        updateImagePreview('');
+        if (fileInput) fileInput.value = '';
+        setFormFeedback(err?.message || 'No se pudo procesar la foto seleccionada.');
+        return '';
+      })
+      .finally(() => {
+        if (imageProcessingPromise === processing) {
+          imageProcessingPromise = null;
+        }
+      });
+
+    imageProcessingPromise = processing;
+  });
+
   urlInput?.addEventListener('input', (e) => {
-    const url = e.target.value.trim();
+    const url = normalizeImageInput(e.target.value);
+    imageProcessingPromise = null;
     if (url) {
-      updateImagePreview(url);
       if (fileInput) fileInput.value = '';
+      updateImagePreview(url);
+    } else if (!fileInput?.files?.length) {
+      updateImagePreview('');
     }
   });
 
@@ -1039,67 +1757,109 @@ function setupAdminCRUD() {
     const allProducts = getProducts();
     const query = (searchInput?.value || '').toLowerCase().trim();
 
+    const indexed = allProducts.map((prod, index) => ({ prod, index }));
     const filtered = query
-      ? allProducts.filter(p => 
-          (p.name || '').toLowerCase().includes(query) || 
-          (p.category || '').toLowerCase().includes(query) ||
-          (p.tag || '').toLowerCase().includes(query) ||
-          (p.description || '').toLowerCase().includes(query)
+      ? indexed.filter(({ prod }) =>
+          (prod.name || '').toLowerCase().includes(query) ||
+          (prod.category || '').toLowerCase().includes(query) ||
+          (prod.tag || '').toLowerCase().includes(query) ||
+          (prod.description || '').toLowerCase().includes(query)
         )
-      : allProducts;
+      : indexed;
 
     if (countBadge) {
-      countBadge.textContent = query 
+      countBadge.textContent = query
         ? `${filtered.length} de ${allProducts.length} dulces`
-        : `${allProducts.length} dulces en carta`;
+        : `${allProducts.length} ${allProducts.length === 1 ? 'dulce' : 'dulces'} en carta`;
     }
 
     if (filtered.length === 0) {
-      productList.innerHTML = query 
+      productList.innerHTML = query
         ? `<p class="empty-state">No se encontraron dulces que coincidan con "${escapeHtml(query)}".</p>`
-        : '<p class="empty-state">No hay productos en la carta actualmente.</p>';
+        : '<p class="empty-state">No hay productos en la carta actualmente. ¡Agregá tu primer dulce desde el formulario!</p>';
       return;
     }
 
-    productList.innerHTML = filtered.map(prod => {
-      const actualIndex = allProducts.indexOf(prod);
-      return `
-        <article class="admin-item-row">
-          <img class="admin-item-thumb" 
-               src="${escapeHtml(prod.image || 'https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=200&q=80')}" 
-               alt="${escapeHtml(prod.name)}" />
-          <div class="admin-item-details">
-            <h4>${escapeHtml(prod.name)}</h4>
-            <p>${escapeHtml(prod.description)}</p>
-            <div class="admin-item-meta">
-              <span class="badge-kind" style="position: static;">${escapeHtml(prod.category)}</span>
-              ${prod.tag ? `<span class="badge-tag" style="position: static;">${escapeHtml(prod.tag)}</span>` : ''}
-              <span class="admin-item-price">${escapeHtml(prod.price || 'Consultar')}</span>
-            </div>
+    productList.innerHTML = filtered.map(({ prod, index }) => `
+      <article class="admin-item-row">
+        <img class="admin-item-thumb" 
+             src="${escapeHtml(prod.image || FALLBACK_PRODUCT_IMAGE)}" 
+             alt="${escapeHtml(prod.name)}"
+             onerror="this.src='${FALLBACK_PRODUCT_IMAGE}'" />
+        <div class="admin-item-details">
+          <h4>${escapeHtml(prod.name)}</h4>
+          <p>${escapeHtml(prod.description)}</p>
+          <div class="admin-item-meta">
+            <span class="badge-kind" style="position: static;">${escapeHtml(prod.category)}</span>
+            ${prod.tag ? `<span class="badge-tag" style="position: static;">${escapeHtml(prod.tag)}</span>` : ''}
+            ${prod.featured ? `<span class="badge-featured">En inicio ♥</span>` : ''}
+            <span class="admin-item-price">${escapeHtml(prod.price || 'Consultar')}</span>
           </div>
-          <div class="admin-item-actions">
-            <button type="button" class="btn-icon btn-edit" data-edit="${actualIndex}" title="Editar dulce">✎</button>
-            <button type="button" class="btn-icon btn-delete" data-delete="${actualIndex}" title="Eliminar dulce">✕</button>
-          </div>
-        </article>
-      `;
-    }).join('');
+        </div>
+        <div class="admin-item-actions">
+          <button type="button" class="btn-icon btn-fav ${prod.featured ? 'active' : ''}" data-toggle-fav="${index}" title="${prod.featured ? 'Quitar de favoritos del inicio' : 'Marcar como favorito en el inicio'}">${prod.featured ? '♥' : '♡'}</button>
+          <button type="button" class="btn-icon btn-edit" data-edit="${index}" title="Editar dulce">✎</button>
+          <button type="button" class="btn-icon btn-delete" data-delete="${index}" title="Eliminar dulce">✕</button>
+        </div>
+      </article>
+    `).join('');
+
+    productList.querySelectorAll('[data-toggle-fav]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const idx = Number(btn.dataset.toggleFav);
+        const products = getProducts();
+        const prod = products[idx];
+        if (!prod) return;
+        prod.featured = !Boolean(prod.featured);
+        btn.disabled = true;
+        const result = await saveProductsAsync(products);
+        btn.disabled = false;
+        if (result.unauthorized) {
+          onUnauthorized?.();
+          return;
+        }
+        if (!result.ok) {
+          setFormFeedback(result.error);
+          showToast(result.error);
+          return;
+        }
+        if (Number(editIndexInput?.value) === idx) {
+          const featuredEl = productForm?.querySelector('[name="featured"]');
+          if (featuredEl) featuredEl.checked = prod.featured;
+        }
+        renderList();
+        showToast(
+          prod.featured
+            ? `"${prod.name}" ahora aparece en los favoritos del inicio ♥`
+            : `"${prod.name}" quitado de los favoritos del inicio.`
+        );
+      });
+    });
 
     productList.querySelectorAll('[data-edit]').forEach(btn => {
       btn.addEventListener('click', () => {
-        const idx = Number(btn.dataset.edit);
-        startEditing(idx);
+        startEditing(Number(btn.dataset.edit));
       });
     });
 
     productList.querySelectorAll('[data-delete]').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         const idx = Number(btn.dataset.delete);
         const products = getProducts();
         const prod = products[idx];
+        if (!prod) return;
         if (confirm(`¿Estás segura de que querés eliminar "${prod.name}" de la carta?`)) {
           products.splice(idx, 1);
-          saveProducts(products);
+          const result = await saveProductsAsync(products);
+          if (result.unauthorized) {
+            onUnauthorized?.();
+            return;
+          }
+          if (!result.ok) {
+            setFormFeedback(result.error);
+            showToast(result.error);
+            return;
+          }
           renderList();
           resetForm();
           showToast(`"${prod.name}" fue eliminado.`);
@@ -1110,9 +1870,18 @@ function setupAdminCRUD() {
 
   searchInput?.addEventListener('input', renderList);
 
-  resetBtn?.addEventListener('click', () => {
+  resetBtn?.addEventListener('click', async () => {
     if (confirm('¿Deseas restaurar la carta a los dulces de ejemplo iniciales? Se recuperarán los 6 productos originales.')) {
-      saveProducts(DEFAULT_PRODUCTS);
+      const result = await saveProductsAsync(cloneDefaultProducts());
+      if (result.unauthorized) {
+        onUnauthorized?.();
+        return;
+      }
+      if (!result.ok) {
+        setFormFeedback(result.error);
+        showToast(result.error);
+        return;
+      }
       if (searchInput) searchInput.value = '';
       resetForm();
       renderList();
@@ -1125,15 +1894,27 @@ function setupAdminCRUD() {
     const prod = products[index];
     if (!prod) return;
 
+    setFormFeedback('');
     if (editIndexInput) editIndexInput.value = String(index);
-    document.querySelector('[name="name"]').value = prod.name || '';
-    document.querySelector('[name="category"]').value = prod.category || 'Tortas';
-    const tagSelect = document.querySelector('[name="tag"]');
-    if (tagSelect) tagSelect.value = prod.tag || '';
-    document.querySelector('[name="price"]').value = prod.price || '';
-    document.querySelector('[name="description"]').value = prod.description || '';
-    
-    if (urlInput) urlInput.value = prod.image && prod.image.startsWith('http') ? prod.image : '';
+    const nameEl = productForm?.querySelector('[name="name"]');
+    const categoryEl = productForm?.querySelector('[name="category"]');
+    const tagEl = productForm?.querySelector('[name="tag"]');
+    const priceEl = productForm?.querySelector('[name="price"]');
+    const descEl = productForm?.querySelector('[name="description"]');
+    const featuredEl = productForm?.querySelector('[name="featured"]');
+
+    if (nameEl) nameEl.value = prod.name || '';
+    if (categoryEl) categoryEl.value = prod.category || 'Tortas';
+    if (tagEl) tagEl.value = prod.tag || '';
+    syncTagChipStates();
+    if (priceEl) priceEl.value = prod.price || '';
+    if (descEl) descEl.value = prod.description || '';
+    if (featuredEl) featuredEl.checked = Boolean(prod.featured);
+
+    if (fileInput) fileInput.value = '';
+    if (urlInput) {
+      urlInput.value = prod.image && !prod.image.startsWith('data:') ? prod.image : '';
+    }
     updateImagePreview(prod.image || '');
 
     if (formTitle) formTitle.textContent = 'Editar Dulce ✨';
@@ -1143,47 +1924,132 @@ function setupAdminCRUD() {
     productForm?.scrollIntoView({ behavior: 'smooth' });
   }
 
-  function resetForm() {
+  function resetForm(keepFeedback = false) {
     productForm?.reset();
     if (editIndexInput) editIndexInput.value = '-1';
     if (formTitle) formTitle.textContent = 'Agregar Nuevo Dulce 🧁';
-    if (submitBtn) submitBtn.innerHTML = 'Guardar en la carta <span>+</span>';
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = 'Guardar en la carta <span>+</span>';
+    }
     cancelBtn?.classList.add('hidden');
+    imageProcessingPromise = null;
     updateImagePreview('');
+    syncTagChipStates();
+    if (!keepFeedback) setFormFeedback('');
   }
 
-  cancelBtn?.addEventListener('click', resetForm);
+  cancelBtn?.addEventListener('click', () => resetForm(false));
 
-  productForm?.addEventListener('submit', (e) => {
+  productForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const data = new FormData(productForm);
-    const editIdx = Number(editIndexInput?.value || '-1');
-    const products = getProducts();
+    setFormFeedback('');
 
-    const productPayload = {
-      name: data.get('name')?.toString().trim(),
-      category: data.get('category')?.toString().trim(),
-      tag: data.get('tag')?.toString().trim() || '',
-      price: data.get('price')?.toString().trim() || 'Consultar',
-      description: data.get('description')?.toString().trim(),
-      image: currentImageData || (urlInput?.value.trim()) || 'https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=700&q=80'
-    };
-
-    if (editIdx >= 0 && editIdx < products.length) {
-      products[editIdx] = productPayload;
-      saveProducts(products);
-      showToast(`¡"${productPayload.name}" actualizado con éxito! ✨`);
-    } else {
-      products.unshift(productPayload);
-      saveProducts(products);
-      showToast(`¡"${productPayload.name}" agregado a la carta! 🎀`);
+    const originalBtnHtml = submitBtn?.innerHTML || 'Guardar en la carta <span>+</span>';
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = 'Guardando... <span>⏳</span>';
     }
 
-    resetForm();
-    renderList();
+    try {
+      // Si se está optimizando una foto recién cargada, esperar a que termine
+      if (imageProcessingPromise) {
+        await imageProcessingPromise;
+      }
+
+      const data = new FormData(productForm);
+      const editIdx = Number(editIndexInput?.value || '-1');
+      const products = getProducts();
+
+      const name = data.get('name')?.toString().trim() || '';
+      const category = data.get('category')?.toString().trim() || 'Tortas';
+      const tag = data.get('tag')?.toString().trim() || '';
+      const price = normalizePriceInput(data.get('price')?.toString() || '');
+      const description = data.get('description')?.toString().trim() || '';
+      const featured = Boolean(productForm?.querySelector('[name="featured"]')?.checked);
+
+      if (!name) {
+        setFormFeedback('Ingresá un nombre para el producto.');
+        return;
+      }
+      if (!description) {
+        setFormFeedback('Ingresá una descripción para el producto.');
+        return;
+      }
+
+      const imageSrc = currentImageData || normalizeImageInput(urlInput?.value) || FALLBACK_PRODUCT_IMAGE;
+
+      const productPayload = {
+        name,
+        category,
+        tag,
+        price,
+        description,
+        image: imageSrc,
+        featured
+      };
+
+      const isEditing = editIdx >= 0 && editIdx < products.length;
+      if (isEditing) {
+        products[editIdx] = productPayload;
+      } else {
+        products.unshift(productPayload);
+      }
+
+      let saveResult = await saveProductsAsync(products);
+
+      // Si superó la cuota de localStorage con una foto subida, intentar compresión extra automáticamente
+      if (!saveResult.ok && saveResult.quotaExceeded && productPayload.image.startsWith('data:image/')) {
+        try {
+          productPayload.image = await compressImageDataUrl(productPayload.image, 520, 0.58);
+          saveResult = await saveProductsAsync(products);
+        } catch (compressErr) {
+          // Mantener el error de cuota original
+        }
+      }
+
+      if (saveResult.unauthorized) {
+        onUnauthorized?.();
+        return;
+      }
+
+      if (!saveResult.ok) {
+        setFormFeedback(saveResult.error);
+        showToast(saveResult.error);
+        return;
+      }
+
+      // Si se agregó un dulce nuevo, limpiar búsqueda para que se vea inmediatamente en la lista
+      if (!isEditing && searchInput && searchInput.value.trim()) {
+        searchInput.value = '';
+      }
+
+      resetForm(true);
+      renderList();
+
+      const successText = isEditing
+        ? `¡"${productPayload.name}" actualizado con éxito! ✨`
+        : `¡"${productPayload.name}" agregado a la carta! 🎀`;
+      setFormFeedback(successText, true);
+      showToast(successText);
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        if (editIndexInput?.value === '-1') {
+          submitBtn.innerHTML = 'Guardar en la carta <span>+</span>';
+        } else {
+          submitBtn.innerHTML = originalBtnHtml;
+        }
+      }
+    }
   });
 
   renderList();
+  subscribeProductsChange(renderList);
+
+  return {
+    refresh: renderList
+  };
 }
 
 // ============================================================================

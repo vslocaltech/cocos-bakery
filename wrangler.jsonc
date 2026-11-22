@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cocos-bakery",
+  "compatibility_date": "2026-11-21",
+  "pages_build_output_dir": ".",
+  "kv_namespaces": [
+    {
+      "binding": "COCOS_KV",
+      "id": "96b0edacf56445ef84e1363af7475513"
+    }
+  ]
+}
